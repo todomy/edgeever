@@ -1,6 +1,7 @@
 import type { AuthSession, AuthUser, MemoDetail, MemoSummary, Notebook, TiptapDoc } from "@edgeever/shared";
+import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,7 +25,7 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { api } from "@/lib/api";
 import { localDb } from "@/lib/local-db";
 import { buildNotebookTree, cn, formatDateTime, parseTagsText, type NotebookNode } from "@/lib/utils";
@@ -803,6 +804,22 @@ const MemoCard = ({
   );
 };
 
+const SUPPORTED_PASTE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
+
+const getImageFilesFromDataTransfer = (dataTransfer: DataTransfer | null) => {
+  if (!dataTransfer) {
+    return [];
+  }
+
+  const fileItems = Array.from(dataTransfer.items ?? [])
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+  const files = fileItems.length > 0 ? fileItems : Array.from(dataTransfer.files ?? []);
+
+  return files.filter((file) => SUPPORTED_PASTE_IMAGE_TYPES.has(file.type));
+};
+
 const EditorPane = ({
   memo,
   notebooks,
@@ -821,9 +838,56 @@ const EditorPane = ({
   const [title, setTitle] = useState("");
   const [tagsText, setTagsText] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [imageUploadState, setImageUploadState] = useState<"idle" | "uploading" | "error">("idle");
+  const memoRef = useRef<MemoDetail | null>(memo);
+  const editorRef = useRef<Editor | null>(null);
+  const insertImageFiles = useCallback((files: File[]) => {
+    const currentMemo = memoRef.current;
+    const currentEditor = editorRef.current;
+
+    if (!currentMemo || !currentEditor || files.length === 0) {
+      return;
+    }
+
+    const targetMemoId = currentMemo.id;
+
+    void (async () => {
+      setImageUploadState("uploading");
+
+      try {
+        for (const file of files) {
+          const { resource } = await api.uploadMemoResource(targetMemoId, file);
+
+          if (memoRef.current?.id !== targetMemoId || !editorRef.current) {
+            setImageUploadState("idle");
+            return;
+          }
+
+          editorRef.current
+            .chain()
+            .focus()
+            .setImage({
+              src: resource.url,
+              alt: resource.filename ?? file.name,
+              title: resource.filename ?? file.name,
+            })
+            .run();
+        }
+
+        setImageUploadState("idle");
+      } catch {
+        setImageUploadState("error");
+        window.setTimeout(() => setImageUploadState("idle"), 2200);
+      }
+    })();
+  }, []);
   const editor = useEditor({
     extensions: [
       StarterKit,
+      Image.configure({
+        allowBase64: false,
+        inline: false,
+      }),
       Placeholder.configure({
         placeholder: "Start writing...",
       }),
@@ -833,8 +897,44 @@ const EditorPane = ({
       attributes: {
         class: "prose prose-slate max-w-none",
       },
+      handlePaste: (_view, event) => {
+        const files = getImageFilesFromDataTransfer(event.clipboardData);
+
+        if (files.length === 0) {
+          return false;
+        }
+
+        event.preventDefault();
+        insertImageFiles(files);
+        return true;
+      },
+      handleDrop: (_view, event) => {
+        const files = getImageFilesFromDataTransfer(event.dataTransfer);
+
+        if (files.length === 0) {
+          return false;
+        }
+
+        event.preventDefault();
+        insertImageFiles(files);
+        return true;
+      },
     },
   });
+
+  useEffect(() => {
+    memoRef.current = memo;
+  }, [memo]);
+
+  useEffect(() => {
+    editorRef.current = editor;
+
+    return () => {
+      if (editorRef.current === editor) {
+        editorRef.current = null;
+      }
+    };
+  }, [editor]);
 
   useEffect(() => {
     if (!memo) {
@@ -940,6 +1040,18 @@ const EditorPane = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {imageUploadState !== "idle" ? (
+              <span
+                className={cn(
+                  "hidden rounded-md px-2 py-1 text-xs font-medium sm:inline-flex",
+                  imageUploadState === "error"
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-emerald-50 text-emerald-700"
+                )}
+              >
+                {imageUploadState === "error" ? "图片上传失败" : "图片上传中"}
+              </span>
+            ) : null}
             <Button size="sm" variant="ghost" title="删除笔记" onClick={() => void onDeleted(memo.id)}>
               <Trash2 className="h-4 w-4" />
             </Button>

@@ -79,6 +79,20 @@ textarea {
   margin: 0.25rem 0;
 }
 
+.ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1rem 0;
+  border: 1px solid #d1fae5;
+  border-radius: 8px;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid #34d399;
+  outline-offset: 3px;
+}
+
 .ProseMirror p.is-editor-empty:first-child::before {
   color: #94a3b8;
   content: attr(data-placeholder);

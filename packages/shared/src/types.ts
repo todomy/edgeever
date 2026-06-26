@@ -34,6 +34,24 @@ export type MemoDetail = MemoSummary & {
   mergedIntoMemoId: string | null;
 };
 
+export type ResourceKind = "image" | "attachment";
+
+export type Resource = {
+  id: string;
+  memoId: string;
+  originalMemoId: string | null;
+  kind: ResourceKind;
+  mimeType: string | null;
+  filename: string | null;
+  byteSize: number;
+  sha256: string | null;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+};
+
 export type AuthUser = {
   id: string;
   username: string;

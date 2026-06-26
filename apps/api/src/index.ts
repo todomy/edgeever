@@ -14,6 +14,7 @@ import {
   type MemoDetail,
   type MemoSummary,
   type Notebook,
+  type Resource,
   type TiptapDoc,
 } from "@edgeever/shared";
 import { zValidator } from "@hono/zod-validator";
@@ -28,6 +29,7 @@ type Bindings = {
   EDGE_EVER_AUTH_USERNAME?: string;
   EDGE_EVER_AUTH_PASSWORD_HASH?: string;
   EDGE_EVER_SESSION_TTL_DAYS?: string;
+  EDGE_EVER_R2_BUCKET_NAME?: string;
 };
 
 type AuthContext = {
@@ -98,6 +100,23 @@ type ApiTokenRow = {
   expires_at: string | null;
 };
 
+type ResourceRow = {
+  id: string;
+  memo_id: string;
+  original_memo_id: string | null;
+  bucket_name: string;
+  object_key: string;
+  kind: "image" | "attachment";
+  mime_type: string | null;
+  filename: string | null;
+  byte_size: number;
+  sha256: string | null;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type AppContext = Context<{ Bindings: Bindings; Variables: { auth: AuthContext } }>;
 
 const SESSION_COOKIE = "edgeever_session";
@@ -107,6 +126,15 @@ const PASSWORD_HASH_BYTES = 32;
 const PASSWORD_SALT_BYTES = 16;
 const SESSION_TOKEN_BYTES = 32;
 const DEFAULT_SESSION_TTL_DAYS = 30;
+const DEFAULT_R2_BUCKET_NAME = "edgeever-resources";
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+]);
 
 const app = new Hono<{ Bindings: Bindings; Variables: { auth: AuthContext } }>();
 
@@ -396,6 +424,132 @@ app.get("/api/v1/memos/:id", async (c) => {
   }
 
   return c.json({ memo });
+});
+
+app.post("/api/v1/memos/:id/resources", async (c) => {
+  const memoId = c.req.param("id");
+  const memo = await getMemoDetail(c.env.DB, memoId);
+
+  if (!memo) {
+    return notFound(c, "Memo not found");
+  }
+
+  const form = await c.req.raw.formData();
+  const file = form.get("file");
+
+  if (!(file instanceof File)) {
+    return badRequest(c, "Expected multipart form field named file.");
+  }
+
+  const mimeType = file.type || "application/octet-stream";
+
+  if (!SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)) {
+    return c.json(
+      {
+        error: {
+          code: "unsupported_media_type",
+          message: "Only PNG, JPEG, GIF, WebP and AVIF images are supported.",
+        },
+      },
+      415
+    );
+  }
+
+  if (file.size <= 0 || file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    return c.json(
+      {
+        error: {
+          code: "upload_too_large",
+          message: "Image must be between 1 byte and 10 MB.",
+        },
+      },
+      413
+    );
+  }
+
+  const actor = getAuditActor(c);
+  const resourceId = createId("res");
+  const now = isoNow();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const objectKey = `memos/${memoId}/${resourceId}${inferImageExtension(file.name, mimeType)}`;
+  const bucketName = c.env.EDGE_EVER_R2_BUCKET_NAME?.trim() || DEFAULT_R2_BUCKET_NAME;
+  const filename = normalizeFilename(file.name) || `${resourceId}${inferImageExtension(file.name, mimeType)}`;
+  const checksum = await sha256Bytes(bytes);
+
+  await c.env.RESOURCES.put(objectKey, bytes, {
+    httpMetadata: {
+      contentType: mimeType,
+      cacheControl: "private, max-age=3600",
+    },
+    customMetadata: {
+      memoId,
+      resourceId,
+      filename,
+    },
+  });
+
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO resources (
+          id, memo_id, bucket_name, object_key, kind, mime_type, filename,
+          byte_size, sha256, metadata_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        resourceId,
+        memoId,
+        bucketName,
+        objectKey,
+        mimeType,
+        filename,
+        file.size,
+        checksum,
+        JSON.stringify({ source: "paste" }),
+        now,
+        now
+      ),
+      auditStatement(c.env.DB, actor.actorType, actor.actorId, "resource.create", "resource", resourceId, {
+        memoId,
+        mimeType,
+        byteSize: file.size,
+      }),
+    ]);
+  } catch (error) {
+    await c.env.RESOURCES.delete(objectKey);
+    throw error;
+  }
+
+  const resource = await getResourceRow(c.env.DB, resourceId);
+
+  if (!resource) {
+    return notFound(c, "Resource not found");
+  }
+
+  return c.json({ resource: mapResource(resource) }, 201);
+});
+
+app.get("/api/v1/resources/:id/blob", async (c) => {
+  const resource = await getResourceRow(c.env.DB, c.req.param("id"));
+
+  if (!resource) {
+    return notFound(c, "Resource not found");
+  }
+
+  const object = await c.env.RESOURCES.get(resource.object_key);
+
+  if (!object) {
+    return notFound(c, "Resource object not found");
+  }
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("Content-Type", resource.mime_type ?? headers.get("Content-Type") ?? "application/octet-stream");
+  headers.set("Cache-Control", headers.get("Cache-Control") ?? "private, max-age=3600");
+  headers.set("Content-Length", String(object.size));
+  headers.set("Content-Disposition", contentDispositionInline(resource.filename));
+  headers.set("X-Content-Type-Options", "nosniff");
+
+  return new Response(object.body, { headers });
 });
 
 app.patch("/api/v1/memos/:id", zValidator("json", MemoUpdateSchema), async (c) => {
@@ -955,6 +1109,22 @@ const mapMemoDetail = (row: MemoDetailRow): MemoDetail => ({
   mergedIntoMemoId: row.merged_into_memo_id,
 });
 
+const mapResource = (row: ResourceRow): Resource => ({
+  id: row.id,
+  memoId: row.memo_id,
+  originalMemoId: row.original_memo_id,
+  kind: row.kind,
+  mimeType: row.mime_type,
+  filename: row.filename,
+  byteSize: row.byte_size,
+  sha256: row.sha256,
+  width: row.width,
+  height: row.height,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  url: `/api/v1/resources/${row.id}/blob`,
+});
+
 const getNotebook = async (db: D1Database, id: string): Promise<Notebook | null> => {
   const row = await db
     .prepare(
@@ -986,6 +1156,17 @@ const getMemoDetail = async (db: D1Database, id: string): Promise<MemoDetail | n
   const row = await getMemoDetailRow(db, id);
   return row ? mapMemoDetail(row) : null;
 };
+
+const getResourceRow = async (db: D1Database, id: string): Promise<ResourceRow | null> =>
+  db
+    .prepare(
+      `SELECT id, memo_id, original_memo_id, bucket_name, object_key, kind, mime_type,
+              filename, byte_size, sha256, width, height, created_at, updated_at
+       FROM resources
+       WHERE id = ? AND is_deleted = 0`
+    )
+    .bind(id)
+    .first<ResourceRow>();
 
 const parseJsonArray = (json: string): string[] => {
   try {
@@ -1065,8 +1246,52 @@ const toFtsQuery = (value: string) => {
 
 const sha256 = async (value: string) => {
   const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return sha256Bytes(bytes);
+};
+
+const sha256Bytes = async (bytes: Uint8Array) => {
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
+const inferImageExtension = (filename: string, mimeType: string) => {
+  const extension = /\.(png|jpe?g|gif|webp|avif)$/i.exec(filename)?.[0]?.toLowerCase();
+
+  if (extension) {
+    return extension === ".jpeg" ? ".jpg" : extension;
+  }
+
+  switch (mimeType) {
+    case "image/png":
+      return ".png";
+    case "image/jpeg":
+      return ".jpg";
+    case "image/gif":
+      return ".gif";
+    case "image/webp":
+      return ".webp";
+    case "image/avif":
+      return ".avif";
+    default:
+      return "";
+  }
+};
+
+const normalizeFilename = (filename: string) =>
+  filename
+    .trim()
+    .replace(/[\\/]/g, "-")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .slice(0, 160);
+
+const contentDispositionInline = (filename: string | null) => {
+  if (!filename) {
+    return "inline";
+  }
+
+  const fallback = normalizeFilename(filename).replace(/"/g, "'");
+  return `inline; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 };
 
 const notFound = (c: Context, message: string) =>
@@ -1078,6 +1303,17 @@ const notFound = (c: Context, message: string) =>
       },
     },
     404
+  );
+
+const badRequest = (c: Context, message: string) =>
+  c.json(
+    {
+      error: {
+        code: "bad_request",
+        message,
+      },
+    },
+    400
   );
 
 const unauthorized = (c: Context, message: string) =>

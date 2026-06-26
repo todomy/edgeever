@@ -117,6 +117,7 @@ config = replaceTomlValue(
 const runtimeVars = {
   EDGE_EVER_AUTH_USERNAME: envValue("AUTH_USERNAME"),
   EDGE_EVER_SESSION_TTL_DAYS: envValue("SESSION_TTL_DAYS"),
+  EDGE_EVER_R2_BUCKET_NAME: envValue("R2_BUCKET_NAME"),
 };
 const runtimeVarLines = Object.entries(runtimeVars)
   .filter(([, value]) => Boolean(value))

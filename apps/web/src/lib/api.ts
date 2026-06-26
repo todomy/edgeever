@@ -1,4 +1,4 @@
-import type { AuthSession, MemoDetail, MemoSummary, Notebook, TiptapDoc } from "@edgeever/shared";
+import type { AuthSession, MemoDetail, MemoSummary, Notebook, Resource, TiptapDoc } from "@edgeever/shared";
 
 type ListNotebooksResponse = {
   notebooks: Notebook[];
@@ -16,6 +16,10 @@ type NotebookResponse = {
   notebook: Notebook;
 };
 
+type ResourceResponse = {
+  resource: Resource;
+};
+
 export class ApiRequestError extends Error {
   status: number;
   code?: string;
@@ -29,13 +33,16 @@ export class ApiRequestError extends Error {
 }
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const headers = new Headers(init?.headers);
+
+  if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const response = await fetch(path, {
     credentials: "include",
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -100,6 +107,16 @@ export const api = {
     }),
 
   getMemo: (memoId: string) => request<MemoResponse>(`/api/v1/memos/${memoId}`),
+
+  uploadMemoResource: (memoId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+
+    return request<ResourceResponse>(`/api/v1/memos/${memoId}/resources`, {
+      method: "POST",
+      body: form,
+    });
+  },
 
   updateMemo: (
     memoId: string,
