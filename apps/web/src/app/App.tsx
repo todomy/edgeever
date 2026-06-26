@@ -41,20 +41,20 @@ import {
   MoreHorizontal,
   PanelLeft,
   Pencil,
-  Pilcrow,
   Plus,
   Quote,
+  Redo2,
   RotateCcw,
   Save,
   Search,
   ShieldCheck,
   Sparkles,
+  SquareCode,
   Strikethrough,
   Tags,
   Trash2,
   Undo2,
   X,
-  Redo2,
 } from "lucide-react";
 import {
   useCallback,
@@ -1911,7 +1911,7 @@ const EditorToolbar = ({ editor, readOnly }: { editor: Editor | null; readOnly: 
         disabled={disabled}
         onClick={() => run((current) => current.chain().focus().toggleCodeBlock().run())}
       >
-        <Pilcrow className="h-4 w-4" />
+        <SquareCode className="h-4 w-4" />
       </EditorToolbarButton>
       <EditorToolbarButton
         title="分割线"
