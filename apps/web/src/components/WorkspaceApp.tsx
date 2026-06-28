@@ -11,7 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Home, Search, KeyRound, Plus, ChevronDown, ChevronRight, X } from "lucide-react";
+import { Home, Search, UserRound, Plus, ChevronDown, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -119,7 +119,7 @@ const MobileBottomNav = ({
     <div className="relative grid h-16 grid-cols-3 items-center">
       <MobileBottomNavButton active={activeItem === "home"} icon={<Home className="h-5 w-5" />} label="首页" onClick={onHome} />
       <div aria-hidden="true" />
-      <MobileBottomNavButton active={activeItem === "settings"} icon={<KeyRound className="h-5 w-5" />} label="设置" onClick={onOpenSettings} />
+      <MobileBottomNavButton active={activeItem === "settings"} icon={<UserRound className="h-5 w-5" />} label="我的" onClick={onOpenSettings} />
       <button
         className="absolute left-1/2 top-[-1.35rem] flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full border-[6px] border-white bg-[#627f58] text-white shadow-[0_12px_26px_rgba(98,127,88,0.32)] transition hover:bg-[#526d49] disabled:cursor-not-allowed disabled:bg-[#b7c5b0] disabled:opacity-70 disabled:hover:bg-[#b7c5b0]"
         type="button"
