@@ -133,15 +133,18 @@ interface CreatedTokenNoticeProps {
 }
 
 const CreatedTokenNotice = ({ token }: CreatedTokenNoticeProps) => {
-  const [copied, setCopied] = useState(false);
+  const [copiedAction, setCopiedAction] = useState<"token" | "config" | null>(null);
 
-  const handleCopy = async () => {
-    if (!(await copyTextToClipboard(token))) {
+  const handleCopy = async (action: "token" | "config") => {
+    const value = action === "token" ? token : buildMcpRemoteConfig(token);
+    if (!(await copyTextToClipboard(value))) {
       return;
     }
 
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    setCopiedAction(action);
+    window.setTimeout(() => {
+      setCopiedAction((current) => (current === action ? null : current));
+    }, 1600);
   };
 
   return (
@@ -150,19 +153,30 @@ const CreatedTokenNotice = ({ token }: CreatedTokenNoticeProps) => {
         <ShieldCheck className="h-4 w-4 text-emerald-700" />
         API Token 已成功生成
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-2 xl:flex-row">
         <div className="flex h-8 min-w-0 flex-1 items-center rounded-md border border-emerald-200 bg-white px-3 font-mono text-xs text-slate-900">
           <span className="min-w-0 truncate">{token}</span>
         </div>
-        <Button
-          size="sm"
-          variant="solid"
-          className="w-full whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto"
-          type="button"
-          onClick={() => void handleCopy()}
-        >
-          {copied ? "已复制" : "复制 Token"}
-        </Button>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+          <Button
+            size="sm"
+            variant="solid"
+            className="w-full whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto"
+            type="button"
+            onClick={() => void handleCopy("token")}
+          >
+            {copiedAction === "token" ? "已复制" : "复制 Token"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full whitespace-nowrap border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-50 sm:w-auto"
+            type="button"
+            onClick={() => void handleCopy("config")}
+          >
+            {copiedAction === "config" ? "已复制" : "复制完整 MCP 配置"}
+          </Button>
+        </div>
       </div>
       <p className="mt-2 text-xs font-medium leading-4 text-emerald-800">安全提醒：此 Token 属于高危凭证，请勿对外泄露。</p>
     </div>
