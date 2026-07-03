@@ -1,24 +1,25 @@
 :root {
-  --edgeever-celadon-50: #f2faf7;
-  --edgeever-celadon-100: #e4f3ef;
-  --edgeever-celadon-200: #d8f3e9;
-  --edgeever-celadon-300: #9fd4c9;
-  --edgeever-celadon-400: #7bd4c0;
-  --edgeever-celadon-600: #16796f;
-  --edgeever-celadon-700: #147a72;
-  --edgeever-celadon-800: #155e57;
-  --edgeever-celadon-900: #0f5f59;
-  --edgeever-celadon-600-rgb: 22 121 111;
-  --edgeever-celadon-900-rgb: 15 95 89;
+  --edgeever-celadon-50: #f5fbf8;
+  --edgeever-celadon-100: #e8f6f1;
+  --edgeever-celadon-200: #d4efe7;
+  --edgeever-celadon-300: #a8dcd1;
+  --edgeever-celadon-400: #70c9b7;
+  --edgeever-celadon-500: #3fb2a1;
+  --edgeever-celadon-600: #2b968b;
+  --edgeever-celadon-700: #237a73;
+  --edgeever-celadon-800: #1e625d;
+  --edgeever-celadon-900: #184f4c;
+  --edgeever-celadon-600-rgb: 43 150 139;
+  --edgeever-celadon-700-rgb: 35 122 115;
 
   --edgeever-brand: var(--edgeever-celadon-600);
-  --edgeever-brand-hover: var(--edgeever-celadon-900);
+  --edgeever-brand-hover: var(--edgeever-celadon-700);
   --edgeever-brand-muted: var(--edgeever-celadon-100);
   --edgeever-brand-soft: var(--edgeever-celadon-50);
   --edgeever-brand-border: var(--edgeever-celadon-300);
   --edgeever-brand-text: var(--edgeever-celadon-800);
   --edgeever-brand-rgb: var(--edgeever-celadon-600-rgb);
-  --edgeever-brand-hover-rgb: var(--edgeever-celadon-900-rgb);
+  --edgeever-brand-hover-rgb: var(--edgeever-celadon-700-rgb);
   --edgeever-brand-logo-bg: var(--edgeever-celadon-200);
   --edgeever-brand-logo-mark: var(--edgeever-celadon-700);
   --edgeever-brand-logo-accent: var(--edgeever-celadon-400);

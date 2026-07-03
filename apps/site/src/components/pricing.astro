@@ -10,7 +10,7 @@ const { plan } = Astro.props;
     class={`flex flex-col h-full justify-between border border-slate-100 p-8 rounded-3xl glow-card hover-lift relative ${plan.popular ? 'border-brand/20 bg-gradient-to-b from-brand-soft/40 to-white' : 'bg-white'}`}>
     
     {plan.popular && (
-      <div class="absolute -top-3 right-6 bg-brand text-white px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider shadow-md shadow-brand/10">
+      <div class="absolute -top-3 right-6 border border-brand-border bg-brand-muted px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider text-brand-text shadow-md shadow-brand/10">
         推荐方案
       </div>
     )}
@@ -46,7 +46,7 @@ const { plan } = Astro.props;
         href={plan.button.link || "#"}
         block
         style={plan.popular ? "primary" : "outline"}
-        class={`w-full text-center py-3 rounded-xl font-semibold shadow-sm transition-all hover:scale-[1.01] ${plan.popular ? 'bg-brand text-white hover:bg-brand-hover shadow-brand/10' : 'border border-slate-200 hover:bg-slate-50'}`}>
+        class={`w-full text-center py-3 rounded-xl font-semibold shadow-sm transition-all hover:scale-[1.01] ${plan.popular ? 'shadow-brand/10' : 'border border-slate-200 hover:bg-slate-50'}`}>
         {plan.button.text || "Get Started"}
       </Link>
     </div>
