@@ -458,7 +458,7 @@ export const EditorPane = ({
   const [isMobileEditing, setIsMobileEditing] = useState(false);
   const [mobilePlainText, setMobilePlainText] = useState("");
   const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
-  const [mobileImeDebugOpen, setMobileImeDebugOpen] = useState(true);
+  const [mobileImeDebugOpen, setMobileImeDebugOpen] = useState(false);
   const [mobileImeDebugActiveElement, setMobileImeDebugActiveElement] = useState(getActiveElementLabel);
   const [mobileImeDebugEvents, setMobileImeDebugEvents] = useState<MobileImeDebugEntry[]>([]);
   const notebookOptions = useMemo(() => getNotebookMoveOptions(notebooks), [notebooks]);
@@ -474,6 +474,8 @@ export const EditorPane = ({
   const mobileDraftTimerRef = useRef<number | null>(null);
   const mobileSaveTimerRef = useRef<number | null>(null);
   const mobileImeDebugEventIdRef = useRef(0);
+  const mobileImeDebugRecorderRef = useRef<(eventName: string, event?: unknown) => void>(() => undefined);
+  const markMobilePlainTextDirtyRef = useRef<() => void>(() => undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const noteSearchInputRef = useRef<HTMLInputElement | null>(null);
   const noteReplaceInputRef = useRef<HTMLInputElement | null>(null);
@@ -858,6 +860,10 @@ export const EditorPane = ({
   }, []);
 
   useEffect(() => {
+    mobileImeDebugRecorderRef.current = recordMobileImeDebugEvent;
+  }, [recordMobileImeDebugEvent]);
+
+  useEffect(() => {
     if (!useMobilePlainTextEditor) {
       return;
     }
@@ -1230,6 +1236,48 @@ export const EditorPane = ({
       saveMutation.mutate();
     }, EDITOR_AUTO_SAVE_DELAY_MS);
   }, [getMobilePlainTextValue, persistCurrentDraft, saveMutation, saveState, tagsText, title]);
+
+  useEffect(() => {
+    markMobilePlainTextDirtyRef.current = markMobilePlainTextDirty;
+  }, [markMobilePlainTextDirty]);
+
+  useEffect(() => {
+    if (!useMobilePlainTextEditor) {
+      return;
+    }
+
+    const textarea = mobileTextAreaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const recordNativeEvent = (event: Event) => {
+      mobileImeDebugRecorderRef.current(event.type, event);
+    };
+    const handleNativeInput = (event: Event) => {
+      mobileImeDebugRecorderRef.current(event.type, event);
+      markMobilePlainTextDirtyRef.current();
+    };
+
+    textarea.addEventListener("focus", recordNativeEvent);
+    textarea.addEventListener("blur", recordNativeEvent);
+    textarea.addEventListener("click", recordNativeEvent);
+    textarea.addEventListener("compositionstart", recordNativeEvent);
+    textarea.addEventListener("compositionupdate", recordNativeEvent);
+    textarea.addEventListener("compositionend", recordNativeEvent);
+    textarea.addEventListener("input", handleNativeInput);
+    mobileImeDebugRecorderRef.current("native-listeners-ready");
+
+    return () => {
+      textarea.removeEventListener("focus", recordNativeEvent);
+      textarea.removeEventListener("blur", recordNativeEvent);
+      textarea.removeEventListener("click", recordNativeEvent);
+      textarea.removeEventListener("compositionstart", recordNativeEvent);
+      textarea.removeEventListener("compositionupdate", recordNativeEvent);
+      textarea.removeEventListener("compositionend", recordNativeEvent);
+      textarea.removeEventListener("input", handleNativeInput);
+    };
+  }, [useMobilePlainTextEditor]);
 
   useEffect(() => () => clearMobileEditorTimers(), [clearMobileEditorTimers]);
 
@@ -1816,19 +1864,18 @@ export const EditorPane = ({
           <textarea
             ref={mobileTextAreaRef}
             defaultValue={mobilePlainText}
-            onFocus={(event) => recordMobileImeDebugEvent("focus", event)}
-            onBlur={(event) => recordMobileImeDebugEvent("blur", event)}
-            onClick={(event) => recordMobileImeDebugEvent("click", event)}
-            onKeyDown={(event) => recordMobileImeDebugEvent("keydown", event)}
-            onBeforeInput={(event) => recordMobileImeDebugEvent("beforeinput", event)}
-            onCompositionStart={(event) => recordMobileImeDebugEvent("compositionstart", event)}
-            onCompositionEnd={(event) => recordMobileImeDebugEvent("compositionend", event)}
-            onInput={(event) => {
-              recordMobileImeDebugEvent("input", event);
-              markMobilePlainTextDirty();
-            }}
+            autoCapitalize="sentences"
+            autoComplete="on"
+            autoCorrect="on"
+            enterKeyHint="enter"
+            inputMode="text"
+            name="memo-body"
+            spellCheck
+            data-edgeever-mobile-editor="plain-textarea"
+            aria-label="笔记正文"
             className="block min-h-full w-full resize-none border-0 bg-white px-4 py-3 text-base leading-7 text-slate-900 outline-none placeholder:text-slate-400 sm:px-7"
             placeholder="开始记录..."
+            style={{ WebkitUserSelect: "text", userSelect: "text" }}
           />
         ) : (
           <EditorContent editor={editor} />
