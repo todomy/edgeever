@@ -1,7 +1,11 @@
-export const openStandaloneMobileEditor = (memoId: string, returnTo = "/") => {
+export const getStandaloneMobileEditorHref = (memoId: string, returnTo = "/") => {
   const params = new URLSearchParams({
     memoId,
     returnTo,
   });
-  window.location.href = `/mobile-edit.html#${params.toString()}`;
+  return `/mobile-edit.html#${params.toString()}`;
+};
+
+export const openStandaloneMobileEditor = (memoId: string, returnTo = "/") => {
+  window.location.href = getStandaloneMobileEditorHref(memoId, returnTo);
 };
