@@ -3,9 +3,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const MEMO_LIST_DENSITY_KEY = "edgeever.mobile.memoListDensity";
 const NOTEBOOK_SORT_KEY = "edgeever.mobile.notebookSort";
 const IMAGE_COMPRESSION_KEY = "edgeever.mobile.imageCompressionEnabled";
+const LOCALE_PREFERENCE_KEY = "edgeever.mobile.localePreference";
 
 export type MobileMemoListDensity = "preview" | "compact";
 export type MobileNotebookSortPreference = "manual" | "name-asc" | "memo-count-desc" | "updated-desc";
+export type MobileLocalePreference = "system" | "zh-CN" | "en-US";
 
 export const readMobileMemoListDensity = async (): Promise<MobileMemoListDensity> => {
   const value = await AsyncStorage.getItem(MEMO_LIST_DENSITY_KEY);
@@ -28,5 +30,14 @@ export const readMobileImageCompressionEnabled = async () => {
 
 export const writeMobileImageCompressionEnabled = (enabled: boolean) => AsyncStorage.setItem(IMAGE_COMPRESSION_KEY, enabled ? "true" : "false");
 
+export const readMobileLocalePreference = async (): Promise<MobileLocalePreference> => {
+  const value = await AsyncStorage.getItem(LOCALE_PREFERENCE_KEY);
+  return isMobileLocalePreference(value) ? value : "system";
+};
+
+export const writeMobileLocalePreference = (locale: MobileLocalePreference) => AsyncStorage.setItem(LOCALE_PREFERENCE_KEY, locale);
+
 const isMobileNotebookSortPreference = (value: unknown): value is MobileNotebookSortPreference =>
   value === "manual" || value === "name-asc" || value === "memo-count-desc" || value === "updated-desc";
+
+const isMobileLocalePreference = (value: unknown): value is MobileLocalePreference => value === "system" || value === "zh-CN" || value === "en-US";

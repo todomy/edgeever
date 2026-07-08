@@ -69,11 +69,14 @@ import type { ApiToken, MemoDetail, MemoRevision, MemoSummary, Notebook, Resourc
 import { clearMobileMemoDraft, readMobileMemoDraft, writeMobileMemoDraft } from "../lib/mobile-drafts";
 import {
   readMobileImageCompressionEnabled,
+  readMobileLocalePreference,
   readMobileMemoListDensity,
   readMobileNotebookSort,
   writeMobileImageCompressionEnabled,
+  writeMobileLocalePreference,
   writeMobileMemoListDensity,
   writeMobileNotebookSort,
+  type MobileLocalePreference,
   type MobileMemoListDensity,
   type MobileNotebookSortPreference,
 } from "../lib/preferences";
@@ -160,6 +163,11 @@ const ADVANCED_PROMPTS = [
       "请通过 EdgeEver MCP 读取我的笔记和现有标签，帮我设计一套更清晰的标签体系。请指出重复、过细、过宽或命名不一致的标签，并给出合并、重命名和新增标签建议。先不要修改笔记，等我确认后再执行。",
   },
 ];
+const MOBILE_LOCALE_OPTIONS: Array<{ label: string; value: MobileLocalePreference }> = [
+  { label: "跟随系统", value: "system" },
+  { label: "简体中文", value: "zh-CN" },
+  { label: "English", value: "en-US" },
+];
 const COMPRESSIBLE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/avif"]);
 const MAX_COMPRESSED_IMAGE_EDGE = 2560;
 const IMAGE_COMPRESSION_QUALITY = 0.82;
@@ -178,6 +186,7 @@ type NotebookOption = {
   depth: number;
 };
 type MobileNotebookSortMode = MobileNotebookSortPreference;
+type MobileLocaleMode = MobileLocalePreference;
 type TextSelection = {
   start: number;
   end: number;
@@ -194,6 +203,7 @@ export const WorkspaceScreen = () => {
   const [memoSortMode, setMemoSortMode] = useState<MemoSortMode>("updated-desc");
   const [memoListDensity, setMemoListDensity] = useState<MobileMemoListDensity>("preview");
   const [notebookSortMode, setNotebookSortMode] = useState<MobileNotebookSortMode>("manual");
+  const [localePreference, setLocalePreference] = useState<MobileLocaleMode>("system");
   const [imageCompressionEnabled, setImageCompressionEnabled] = useState(true);
   const [selectedMemoId, setSelectedMemoId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
@@ -388,6 +398,20 @@ export const WorkspaceScreen = () => {
   useEffect(() => {
     let mounted = true;
 
+    readMobileLocalePreference().then((locale) => {
+      if (mounted) {
+        setLocalePreference(locale);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
     readMobileNotebookSort().then((sortMode) => {
       if (mounted) {
         setNotebookSortMode(sortMode);
@@ -407,6 +431,11 @@ export const WorkspaceScreen = () => {
   const handleNotebookSortModeChange = (sortMode: MobileNotebookSortMode) => {
     setNotebookSortMode(sortMode);
     void writeMobileNotebookSort(sortMode);
+  };
+
+  const handleLocalePreferenceChange = (locale: MobileLocaleMode) => {
+    setLocalePreference(locale);
+    void writeMobileLocalePreference(locale);
   };
 
   const handleImageCompressionChange = (enabled: boolean) => {
@@ -749,6 +778,8 @@ export const WorkspaceScreen = () => {
           syncQueueMessage={syncQueueMessage}
           syncQueueSummary={syncQueueSummary}
           isSyncingQueue={isSyncingQueue}
+          localePreference={localePreference}
+          onLocalePreferenceChange={handleLocalePreferenceChange}
           imageCompressionEnabled={imageCompressionEnabled}
           onImageCompressionChange={handleImageCompressionChange}
         />
@@ -1141,9 +1172,11 @@ const AccountView = ({ instance, userName, onSignOut }: { instance: string; user
 const SettingsView = ({
   imageCompressionEnabled,
   isSyncingQueue,
+  localePreference,
   memoCount,
   notebookCount,
   onImageCompressionChange,
+  onLocalePreferenceChange,
   onOpenAdvancedPlay,
   onOpenApiTokens,
   onOpenEvernoteGuide,
@@ -1159,9 +1192,11 @@ const SettingsView = ({
 }: {
   imageCompressionEnabled: boolean;
   isSyncingQueue: boolean;
+  localePreference: MobileLocaleMode;
   memoCount: number;
   notebookCount: number;
   onImageCompressionChange: (enabled: boolean) => void;
+  onLocalePreferenceChange: (locale: MobileLocaleMode) => void;
   onOpenAdvancedPlay: () => void;
   onOpenApiTokens: () => void;
   onOpenEvernoteGuide: () => void;
@@ -1204,6 +1239,26 @@ const SettingsView = ({
     <PanelRow label="移动端形态" value="React Native" />
     <PanelRow label="笔记本数量" value={String(notebookCount)} />
     <PanelRow label="笔记总数" value={String(memoCount)} />
+    <View style={styles.panelRow}>
+      <View style={styles.preferenceStack}>
+        <View style={styles.preferenceText}>
+          <Text style={styles.panelLabel}>语言偏好</Text>
+          <Text style={styles.panelValue}>{getMobileLocalePreferenceLabel(localePreference)}</Text>
+          <Text style={styles.panelHint}>与 PWA 设置保持一致，可选择跟随系统、简体中文或 English。</Text>
+        </View>
+        <View style={styles.scopeGrid}>
+          {MOBILE_LOCALE_OPTIONS.map((option) => {
+            const selected = localePreference === option.value;
+
+            return (
+              <Pressable key={option.value} onPress={() => onLocalePreferenceChange(option.value)} style={[styles.scopePill, selected && styles.scopePillActive]}>
+                <Text style={[styles.scopePillText, selected && styles.scopePillTextActive]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    </View>
     <View style={styles.panelRow}>
       <View style={styles.preferenceRow}>
         <View style={styles.preferenceText}>
@@ -3919,6 +3974,9 @@ const getTokenScopeLabel = (scope: string) => {
   return labels[scope] ?? scope;
 };
 
+const getMobileLocalePreferenceLabel = (locale: MobileLocaleMode) =>
+  MOBILE_LOCALE_OPTIONS.find((option) => option.value === locale)?.label ?? "跟随系统";
+
 const buildMcpRemoteConfig = (baseUrl: string, token: string) =>
   JSON.stringify(
     {
@@ -4448,6 +4506,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     justifyContent: "space-between",
+  },
+  preferenceStack: {
+    gap: 12,
   },
   preferenceText: {
     flex: 1,
