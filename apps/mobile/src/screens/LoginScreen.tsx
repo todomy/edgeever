@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -10,7 +11,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ExternalLink } from "lucide-react-native";
 import { useSession } from "../lib/session";
+
+const GITHUB_REPOSITORY_URL = "https://github.com/tianma-if/edgeever";
 
 export const LoginScreen = () => {
   const { signIn } = useSession();
@@ -41,6 +45,9 @@ export const LoginScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Pressable accessibilityLabel="GitHub 仓库" accessibilityRole="link" onPress={() => Linking.openURL(GITHUB_REPOSITORY_URL)} style={styles.githubButton}>
+        <ExternalLink color="#475569" size={20} />
+      </Pressable>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
         <View style={styles.header}>
           <Text style={styles.title}>EdgeEver</Text>
@@ -111,6 +118,20 @@ const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: "#f8fafc",
     flex: 1,
+  },
+  githubButton: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#e2e8f0",
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: "center",
+    position: "absolute",
+    right: 18,
+    top: 18,
+    width: 42,
+    zIndex: 2,
   },
   keyboard: {
     flex: 1,

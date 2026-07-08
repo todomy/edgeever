@@ -107,6 +107,7 @@ import {
 const ALL_NOTES_ID = "all";
 const DEFAULT_MEMO_TITLE = "无标题笔记";
 const MOBILE_APP_VERSION = "0.1.2";
+const GITHUB_REPOSITORY_URL = "https://github.com/tianma-if/edgeever";
 const EVERNOTE_IMPORT_SCRIPT_URL =
   "https://raw.githubusercontent.com/tianma-if/edgeever/main/scripts/import-evernote-enex-via-mcp.mjs";
 const EVERNOTE_MIGRATION_PROMPT = `你是 AI 编程助手。请帮我把本地的印象笔记全量迁移到我当前部署的 EdgeEver 实例中：
@@ -1570,6 +1571,13 @@ const AccountView = ({ instance, userName, onSignOut }: { instance: string; user
     <Text style={styles.sectionTitle}>账户</Text>
     <PanelRow label="当前用户" value={userName} />
     <PanelRow label="实例地址" value={instance} />
+    <Pressable accessibilityRole="link" onPress={() => Linking.openURL(GITHUB_REPOSITORY_URL)} style={[styles.panelRow, styles.panelLinkRow]}>
+      <View style={styles.panelLinkText}>
+        <Text style={styles.panelLabel}>GitHub 仓库</Text>
+        <Text style={styles.panelValue}>tianma-if/edgeever</Text>
+      </View>
+      <ExternalLink color="#0f172a" size={18} />
+    </Pressable>
     <Pressable onPress={onSignOut} style={styles.dangerButton}>
       <LogOut color="#b91c1c" size={18} />
       <Text style={styles.dangerButtonText}>退出登录</Text>
@@ -5611,6 +5619,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
     padding: 14,
+  },
+  panelLinkRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  panelLinkText: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
   },
   panelLabel: {
     color: "#64748b",
