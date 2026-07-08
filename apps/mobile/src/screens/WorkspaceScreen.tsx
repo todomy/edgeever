@@ -4047,6 +4047,14 @@ const EditMemoModal = ({
   const [insertTextOpen, setInsertTextOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const replaceMatches = useMemo(() => getTextSearchMatches(contentMarkdown, replaceQuery), [contentMarkdown, replaceQuery]);
+  const hasEditChanges = Boolean(
+    memo &&
+      (title !== (memo.title?.trim() || "") ||
+        contentMarkdown !== (memo.contentMarkdown || "") ||
+        notebookId !== memo.notebookId ||
+        tagsText !== memo.tags.join(", "))
+  );
+  const canSaveEditMemo = Boolean(memo && notebookId && hasEditChanges && !updateMutation.isPending);
 
   useEffect(() => {
     let mounted = true;
@@ -4259,8 +4267,8 @@ const EditMemoModal = ({
             <X color="#0f172a" size={20} />
           </IconButton>
           <Text style={styles.modalTitle}>编辑笔记</Text>
-          <IconButton onPress={handleSave}>
-            {updateMutation.isPending ? <ActivityIndicator color="#0f172a" /> : <Check color="#0f172a" size={20} />}
+          <IconButton disabled={!canSaveEditMemo} onPress={handleSave}>
+            {updateMutation.isPending ? <ActivityIndicator color="#0f172a" /> : <Check color={canSaveEditMemo ? "#0f172a" : "#cbd5e1"} size={20} />}
           </IconButton>
         </View>
 
