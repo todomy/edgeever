@@ -2614,6 +2614,7 @@ const ApiTokenRow = ({
 }) => {
   const tokenCopyLabel = `token-${token.id}`;
   const configCopyLabel = `config-${token.id}`;
+  const canCopyToken = Boolean(token.token && !token.isRevoked);
 
   return (
     <View style={[styles.apiTokenRow, token.isRevoked && styles.buttonDisabled]}>
@@ -2627,11 +2628,11 @@ const ApiTokenRow = ({
         <Text style={styles.panelLabel}>{token.lastUsedAt ? `最近使用 ${formatDate(token.lastUsedAt)}` : "从未使用"}</Text>
       </View>
       <View style={styles.apiTokenActions}>
-        <IconButton onPress={() => token.token && onCopy(token.token, tokenCopyLabel)}>
-          {copiedValue === tokenCopyLabel ? <ShieldCheck color="#047857" size={18} /> : <Copy color={token.token ? "#0f172a" : "#cbd5e1"} size={18} />}
+        <IconButton disabled={!canCopyToken} onPress={() => token.token && onCopy(token.token, tokenCopyLabel)}>
+          {copiedValue === tokenCopyLabel ? <ShieldCheck color="#047857" size={18} /> : <Copy color={canCopyToken ? "#0f172a" : "#cbd5e1"} size={18} />}
         </IconButton>
-        <IconButton onPress={() => token.token && onCopy(buildMcpRemoteConfig(baseUrl, token.token), configCopyLabel)}>
-          {copiedValue === configCopyLabel ? <ShieldCheck color="#047857" size={18} /> : <KeyRound color={token.token ? "#0f172a" : "#cbd5e1"} size={18} />}
+        <IconButton disabled={!canCopyToken} onPress={() => token.token && onCopy(buildMcpRemoteConfig(baseUrl, token.token), configCopyLabel)}>
+          {copiedValue === configCopyLabel ? <ShieldCheck color="#047857" size={18} /> : <KeyRound color={canCopyToken ? "#0f172a" : "#cbd5e1"} size={18} />}
         </IconButton>
         <IconButton onPress={() => !isDeleting && onDelete(token)}>
           <Trash2 color="#b91c1c" size={18} />
