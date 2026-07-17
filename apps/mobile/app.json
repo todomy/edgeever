@@ -13,13 +13,23 @@
     },
     "android": {
       "package": "org.edgeever.mobile",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#f8fafc"
       }
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

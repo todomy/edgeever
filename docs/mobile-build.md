@@ -21,7 +21,8 @@ The APK is uploaded as a GitHub Actions artifact named `edgeever-android-debug-a
 
 ## Release Builds
 
-Android release builds require signing credentials. Add these later when needed:
+Run the workflow manually to build a signed Android App Bundle. The workflow
+uses the following GitHub Actions secrets:
 
 ```text
 ANDROID_KEYSTORE_BASE64
@@ -29,6 +30,11 @@ ANDROID_KEYSTORE_PASSWORD
 ANDROID_KEY_ALIAS
 ANDROID_KEY_PASSWORD
 ```
+
+The resulting artifact is named `edgeever-android-release-aab`. The upload
+keystore is only used to prove ownership when uploading bundles; Google Play
+App Signing manages the app signing key delivered to users. Keep an encrypted
+backup of the upload keystore and its credentials outside the repository.
 
 iOS device builds and App Store submissions require Apple Developer Program enrollment, certificates, and provisioning profiles. Until those credentials are available, iOS can be developed locally with Expo Go or simulator builds, but installable device `.ipa` release automation should wait.
 
