@@ -73,6 +73,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Markdown from "react-native-markdown-display";
 import { createExcerpt, docToText, getNotebookDescendantIds, markdownToDoc, type ApiToken, type MemoDetail, type MemoRevision, type MemoSummary, type Notebook, type ResourceListItem, type TagSummary } from "@edgeever/shared";
 import { clearMobileMemoDraft, readMobileMemoDraft, writeMobileMemoDraft } from "../lib/mobile-drafts";
 import {
@@ -544,9 +545,6 @@ export const WorkspaceScreen = () => {
   const allVisibleMemosSelected = canToggleVisibleSelection && memos.every((memo) => selectedMemoIds.has(memo.id));
   const nextSelectionPinValue = selectedMemos.some((memo) => !memo.isPinned);
   const canCreateMemo = memoView !== "trash" && notebooks.length > 0;
-  const selectedMemoIndex = selectedMemoId ? memos.findIndex((memo) => memo.id === selectedMemoId) : -1;
-  const previousMemoId = selectedMemoIndex > 0 ? memos[selectedMemoIndex - 1]?.id : null;
-  const nextMemoId = selectedMemoIndex >= 0 && selectedMemoIndex < memos.length - 1 ? memos[selectedMemoIndex + 1]?.id : null;
 
   useEffect(() => {
     clearSelection();
@@ -1154,12 +1152,11 @@ export const WorkspaceScreen = () => {
         isRestoring={restoreMemoMutation.isPending}
         isSaving={updateMemoMutation.isPending}
         memo={selectedMemo}
+        notebookName={notebooks.find((notebook) => notebook.id === selectedMemo?.notebookId)?.name ?? "未分类"}
         onClose={closeDetail}
         onDelete={handleDeleteMemo}
         onEdit={setEditingMemo}
         onRichEdit={setRichEditingMemo}
-        onOpenNextMemo={nextMemoId ? () => setSelectedMemoId(nextMemoId) : undefined}
-        onOpenPreviousMemo={previousMemoId ? () => setSelectedMemoId(previousMemoId) : undefined}
         onOpenResources={() => setResourcesOpen(true)}
         onOpenRevisions={setRevisionMemo}
         onRestore={(memo) => restoreMemoMutation.mutate(memo)}
@@ -2033,7 +2030,9 @@ const CreateMemoModal = ({
   const [contentMarkdown, setContentMarkdown] = useState("");
   const [contentSelection, setContentSelection] = useState<TextSelection>({ start: 0, end: 0 });
   const [insertTextOpen, setInsertTextOpen] = useState(false);
+  const [notebookPickerOpen, setNotebookPickerOpen] = useState(false);
   const targetNotebookId = notebookId || fallbackNotebookId;
+  const selectedNotebookName = notebooks.find((notebook) => notebook.id === targetNotebookId)?.name ?? "选择笔记本";
 
   useEffect(() => {
     if (visible) {
@@ -2119,18 +2118,22 @@ const CreateMemoModal = ({
     <Modal animationType="slide" onRequestClose={() => !createMutation.isPending && onClose()} presentationStyle="pageSheet" visible={visible}>
       <SafeAreaView style={styles.modalSafeArea}>
         <View style={styles.modalHeader}>
-          <IconButton disabled={createMutation.isPending} onPress={onClose}>
+          <IconButton accessibilityLabel="关闭新建" disabled={createMutation.isPending} onPress={onClose}>
             <X color={createMutation.isPending ? "#cbd5e1" : "#0f172a"} size={20} />
           </IconButton>
           <Text style={styles.modalTitle}>新建笔记</Text>
-          <IconButton disabled={!canSubmitCreateMemo} onPress={() => createMutation.mutate()}>
+          <IconButton accessibilityLabel="创建笔记" disabled={!canSubmitCreateMemo} onPress={() => createMutation.mutate()}>
             {createMutation.isPending ? <ActivityIndicator color="#0f172a" /> : <Check color={canSubmitCreateMemo ? "#0f172a" : "#cbd5e1"} size={20} />}
           </IconButton>
         </View>
 
         <ScrollView contentContainerStyle={styles.editorForm}>
           <Text style={styles.label}>笔记本</Text>
-          <NotebookPicker notebooks={notebooks} onChange={setNotebookId} selectedNotebookId={notebookId || fallbackNotebookId} />
+          <Pressable accessibilityRole="button" onPress={() => setNotebookPickerOpen(true)} style={styles.editorNotebookButton}>
+            <Folder color="#64748b" size={18} />
+            <Text numberOfLines={1} style={styles.editorNotebookButtonText}>{selectedNotebookName}</Text>
+            <ChevronRight color="#94a3b8" size={18} />
+          </Pressable>
 
           <Text style={styles.label}>标题</Text>
           <TextInput onChangeText={setTitle} placeholder={DEFAULT_MEMO_TITLE} placeholderTextColor="#94a3b8" style={styles.titleInput} value={title} />
@@ -2165,6 +2168,18 @@ const CreateMemoModal = ({
           ) : null}
         </ScrollView>
         <InsertTextModal onClose={() => setInsertTextOpen(false)} onInsert={insertManualText} visible={insertTextOpen} />
+        <NotebookPickerModal
+          activeNotebookId={targetNotebookId}
+          notebookSortMode="manual"
+          notebooks={notebooks}
+          notebooksMemoCount={notebooks.reduce((total, notebook) => total + notebook.memoCount, 0)}
+          onClose={() => setNotebookPickerOpen(false)}
+          onSelect={(nextNotebookId) => {
+            setNotebookId(nextNotebookId);
+            setNotebookPickerOpen(false);
+          }}
+          visible={notebookPickerOpen}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -3892,12 +3907,11 @@ const MemoDetailModal = ({
   isRestoring,
   isSaving,
   memo,
+  notebookName,
   onClose,
   onDelete,
   onEdit,
   onRichEdit,
-  onOpenNextMemo,
-  onOpenPreviousMemo,
   onOpenResources,
   onOpenRevisions,
   onRestore,
@@ -3909,18 +3923,18 @@ const MemoDetailModal = ({
   isRestoring: boolean;
   isSaving: boolean;
   memo: MemoDetail | null;
+  notebookName: string;
   onClose: () => void;
   onDelete: (memo: MemoDetail) => void;
   onEdit: (memo: MemoDetail) => void;
   onRichEdit: (memo: MemoDetail) => void;
-  onOpenNextMemo?: () => void;
-  onOpenPreviousMemo?: () => void;
   onOpenResources: () => void;
   onOpenRevisions: (memo: MemoDetail) => void;
   onRestore: (memo: MemoDetail) => void;
   onTogglePin: (memo: MemoDetail) => void;
   visible: boolean;
 }) => {
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
@@ -3941,24 +3955,22 @@ const MemoDetailModal = ({
     setActiveMatchIndex((current) => (current + direction + searchMatches.length) % searchMatches.length);
   };
 
+  const closeActionsAndRun = (action: () => void) => {
+    setActionsOpen(false);
+    action();
+  };
+
   return (
-    <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet" visible={visible}>
+    <Modal animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen" visible={visible}>
       <SafeAreaView style={styles.modalSafeArea}>
-        <View style={styles.modalHeader}>
-          <IconButton onPress={onClose}>
-            <X color="#0f172a" size={20} />
-          </IconButton>
-          <Text numberOfLines={1} style={styles.modalTitle}>
-            {memo?.title?.trim() || DEFAULT_MEMO_TITLE}
-          </Text>
-          <View style={styles.modalHeaderActions}>
-            <IconButton disabled={!onOpenPreviousMemo} onPress={() => onOpenPreviousMemo?.()}>
-              <ChevronLeft color={onOpenPreviousMemo ? "#0f172a" : "#cbd5e1"} size={18} />
-            </IconButton>
-            <IconButton disabled={!onOpenNextMemo} onPress={() => onOpenNextMemo?.()}>
-              <ChevronRight color={onOpenNextMemo ? "#0f172a" : "#cbd5e1"} size={18} />
-            </IconButton>
-          </View>
+        <View style={styles.detailHeader}>
+          <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={onClose} style={styles.detailHeaderButton}>
+            <ChevronLeft color="#475569" size={21} />
+          </Pressable>
+          <Text style={styles.detailSyncStatus}>{isSaving ? "保存中" : "已同步"}</Text>
+          <Pressable accessibilityLabel="笔记操作" accessibilityRole="button" onPress={() => setActionsOpen(true)} style={styles.detailHeaderButton}>
+            <MoreHorizontal color="#475569" size={21} />
+          </Pressable>
         </View>
 
         {isLoading ? (
@@ -3968,51 +3980,10 @@ const MemoDetailModal = ({
         ) : memo ? (
           <ScrollView contentContainerStyle={styles.detailContent}>
             <Text style={styles.detailTitle}>{memo.title?.trim() || DEFAULT_MEMO_TITLE}</Text>
-            <View style={styles.memoMeta}>
-              <Text style={styles.memoDate}>{formatDate(memo.updatedAt, localePreference)}</Text>
-              <Text style={styles.memoDate}>修订 {memo.revision}</Text>
-            </View>
-            <View style={styles.actionRow}>
-              {memo.isDeleted ? (
-                <>
-                  <ActionButton label="查找" onPress={() => setSearchOpen((open) => !open)}>
-                    <Search color="#0f172a" size={16} />
-                  </ActionButton>
-                  <ActionButton label="历史" onPress={() => onOpenRevisions(memo)}>
-                    <History color="#0f172a" size={16} />
-                  </ActionButton>
-                  <ActionButton label="资源" onPress={onOpenResources}>
-                    <Archive color="#0f172a" size={16} />
-                  </ActionButton>
-                  <ActionButton disabled={isRestoring} label={isRestoring ? "恢复中" : "恢复"} onPress={() => onRestore(memo)}>
-                    <RotateCcw color="#0f172a" size={16} />
-                  </ActionButton>
-                </>
-              ) : (
-                <>
-                  <ActionButton disabled={isSaving} label={memo.isPinned ? "取消置顶" : "置顶"} onPress={() => onTogglePin(memo)}>
-                    <Pin color="#0f172a" size={16} />
-                  </ActionButton>
-                  <ActionButton label="编辑" onPress={() => onEdit(memo)}>
-                    <Pencil color="#0f172a" size={16} />
-                  </ActionButton>
-                  <ActionButton label="富文本" onPress={() => onRichEdit(memo)}>
-                    <Bold color="#0f172a" size={16} />
-                  </ActionButton>
-                  <ActionButton label="查找" onPress={() => setSearchOpen((open) => !open)}>
-                    <Search color="#0f172a" size={16} />
-                  </ActionButton>
-                  <ActionButton label="历史" onPress={() => onOpenRevisions(memo)}>
-                    <History color="#0f172a" size={16} />
-                  </ActionButton>
-                  <ActionButton label="资源" onPress={onOpenResources}>
-                    <Archive color="#0f172a" size={16} />
-                  </ActionButton>
-                </>
-              )}
-              <ActionButton danger disabled={isDeleting} label={isDeleting ? "删除中" : memo.isDeleted ? "永久删除" : "删除"} onPress={() => onDelete(memo)}>
-                <Trash2 color="#b91c1c" size={16} />
-              </ActionButton>
+            <View style={styles.detailMetaRow}>
+              <Text numberOfLines={1} style={styles.detailNotebookName}>{notebookName}</Text>
+              {memo.tags.length ? <Tag color="#64748b" size={15} /> : null}
+              {memo.tags.length ? <Text numberOfLines={1} style={styles.detailTagsInline}>{memo.tags.join(", ")}</Text> : null}
             </View>
             {searchOpen ? (
               <View style={styles.noteSearchPanel}>
@@ -4039,22 +4010,45 @@ const MemoDetailModal = ({
                 </View>
               </View>
             ) : null}
-            {memo.tags.length ? (
-              <View style={styles.tagList}>
-                {memo.tags.map((tag) => (
-                  <Text key={tag} style={styles.tag}>
-                    #{tag}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-            <HighlightedDetailText activeIndex={activeMatchIndex} matches={searchMatches} text={detailText} />
+            <View style={styles.detailDivider} />
+            {searchOpen && searchQuery.trim() ? (
+              <HighlightedDetailText activeIndex={activeMatchIndex} matches={searchMatches} text={detailText} />
+            ) : (
+              <Markdown style={detailMarkdownStyles}>{detailText}</Markdown>
+            )}
           </ScrollView>
         ) : (
           <View style={styles.centerState}>
             <Text style={styles.errorText}>笔记加载失败</Text>
           </View>
         )}
+        {memo && !memo.isDeleted ? (
+          <Pressable accessibilityLabel="编辑笔记" accessibilityRole="button" onPress={() => onEdit(memo)} style={styles.detailEditFab}>
+            <Pencil color="#ffffff" size={22} />
+          </Pressable>
+        ) : null}
+        {memo ? (
+          <Modal animationType="fade" onRequestClose={() => setActionsOpen(false)} transparent visible={actionsOpen}>
+            <Pressable onPress={() => setActionsOpen(false)} style={styles.actionSheetBackdrop}>
+              <Pressable style={styles.actionSheet}>
+                <View style={styles.actionSheetHandle} />
+                <Text style={styles.actionSheetTitle}>笔记操作</Text>
+                {memo.isDeleted ? (
+                  <ActionSheetItem disabled={isRestoring} icon={<RotateCcw color="#0f172a" size={18} />} label={isRestoring ? "恢复中" : "恢复笔记"} onPress={() => closeActionsAndRun(() => onRestore(memo))} />
+                ) : (
+                  <>
+                    <ActionSheetItem disabled={isSaving} icon={<Pin color="#0f172a" size={18} />} label={memo.isPinned ? "取消置顶" : "置顶"} onPress={() => closeActionsAndRun(() => onTogglePin(memo))} />
+                    <ActionSheetItem icon={<Bold color="#0f172a" size={18} />} label="富文本编辑" onPress={() => closeActionsAndRun(() => onRichEdit(memo))} />
+                  </>
+                )}
+                <ActionSheetItem icon={<Search color="#0f172a" size={18} />} label="查找当前笔记" onPress={() => closeActionsAndRun(() => setSearchOpen((open) => !open))} />
+                <ActionSheetItem icon={<History color="#0f172a" size={18} />} label="修订历史" onPress={() => closeActionsAndRun(() => onOpenRevisions(memo))} />
+                <ActionSheetItem icon={<Archive color="#0f172a" size={18} />} label="资源" onPress={() => closeActionsAndRun(onOpenResources)} />
+                <ActionSheetItem danger disabled={isDeleting} icon={<Trash2 color="#b91c1c" size={18} />} label={isDeleting ? "删除中" : memo.isDeleted ? "永久删除" : "删除"} onPress={() => closeActionsAndRun(() => onDelete(memo))} />
+              </Pressable>
+            </Pressable>
+          </Modal>
+        ) : null}
       </SafeAreaView>
     </Modal>
   );
@@ -4241,9 +4235,11 @@ const EditMemoModal = ({
   const [tagsText, setTagsText] = useState("");
   const [replaceQuery, setReplaceQuery] = useState("");
   const [replaceValue, setReplaceValue] = useState("");
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [loadedDraftUpdatedAt, setLoadedDraftUpdatedAt] = useState<string | null>(null);
   const [insertTextOpen, setInsertTextOpen] = useState(false);
+  const [notebookPickerOpen, setNotebookPickerOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const localePreference = useMobileLocalePreference();
   const replaceMatches = useMemo(() => getTextSearchMatches(contentMarkdown, replaceQuery), [contentMarkdown, replaceQuery]);
@@ -4255,6 +4251,7 @@ const EditMemoModal = ({
         tagsText !== memo.tags.join(", "))
   );
   const canSaveEditMemo = Boolean(memo && notebookId && hasEditChanges && !updateMutation.isPending);
+  const selectedNotebookName = notebooks.find((notebook) => notebook.id === notebookId)?.name ?? "选择笔记本";
 
   useEffect(() => {
     let mounted = true;
@@ -4268,6 +4265,7 @@ const EditMemoModal = ({
       setTagsText(memo.tags.join(", "));
       setReplaceQuery("");
       setReplaceValue("");
+      setReplaceOpen(false);
       setUploadProgress("");
       setLoadedDraftUpdatedAt(null);
       readMobileMemoDraft(memo.id).then((draft) => {
@@ -4476,11 +4474,11 @@ const EditMemoModal = ({
     <Modal animationType="slide" onRequestClose={requestClose} presentationStyle="pageSheet" visible={Boolean(memo)}>
       <SafeAreaView style={styles.modalSafeArea}>
         <View style={styles.modalHeader}>
-          <IconButton disabled={updateMutation.isPending || uploadResourceMutation.isPending} onPress={requestClose}>
+          <IconButton accessibilityLabel="关闭编辑" disabled={updateMutation.isPending || uploadResourceMutation.isPending} onPress={requestClose}>
             <X color={updateMutation.isPending || uploadResourceMutation.isPending ? "#cbd5e1" : "#0f172a"} size={20} />
           </IconButton>
           <Text style={styles.modalTitle}>编辑笔记</Text>
-          <IconButton disabled={!canSaveEditMemo} onPress={handleSave}>
+          <IconButton accessibilityLabel="保存笔记" disabled={!canSaveEditMemo} onPress={handleSave}>
             {updateMutation.isPending ? <ActivityIndicator color="#0f172a" /> : <Check color={canSaveEditMemo ? "#0f172a" : "#cbd5e1"} size={20} />}
           </IconButton>
         </View>
@@ -4493,7 +4491,11 @@ const EditMemoModal = ({
           ) : null}
 
           <Text style={styles.label}>笔记本</Text>
-          <NotebookPicker notebooks={notebooks} onChange={setNotebookId} selectedNotebookId={notebookId} />
+          <Pressable accessibilityRole="button" onPress={() => setNotebookPickerOpen(true)} style={styles.editorNotebookButton}>
+            <Folder color="#64748b" size={18} />
+            <Text numberOfLines={1} style={styles.editorNotebookButtonText}>{selectedNotebookName}</Text>
+            <ChevronRight color="#94a3b8" size={18} />
+          </Pressable>
 
           <Text style={styles.label}>标题</Text>
           <TextInput onChangeText={setTitle} placeholder={DEFAULT_MEMO_TITLE} placeholderTextColor="#94a3b8" style={styles.titleInput} value={title} />
@@ -4514,36 +4516,43 @@ const EditMemoModal = ({
             onUploadResource={() => uploadResourceMutation.mutate()}
           />
           {uploadProgress ? <Text style={styles.assetsHint}>{uploadProgress}</Text> : null}
-          <View style={styles.noteSearchPanel}>
-            <View style={styles.searchBox}>
-              <Search color="#64748b" size={18} />
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={setReplaceQuery}
-                placeholder="查找正文"
-                placeholderTextColor="#94a3b8"
-                style={styles.searchInput}
-                value={replaceQuery}
-              />
-              <Text style={[styles.noteSearchCount, replaceQuery.trim() && replaceMatches.length === 0 && styles.noteSearchCountEmpty]}>{replaceQuery.trim() ? replaceMatches.length : 0}</Text>
+          <Pressable accessibilityRole="button" onPress={() => setReplaceOpen((open) => !open)} style={styles.editorFindToggle}>
+            <Search color="#64748b" size={17} />
+            <Text style={styles.editorFindToggleText}>{replaceOpen ? "收起查找与替换" : "查找与替换"}</Text>
+            <ChevronDown color="#94a3b8" size={17} style={replaceOpen ? { transform: [{ rotate: "180deg" }] } : undefined} />
+          </Pressable>
+          {replaceOpen ? (
+            <View style={styles.noteSearchPanel}>
+              <View style={styles.searchBox}>
+                <Search color="#64748b" size={18} />
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={setReplaceQuery}
+                  placeholder="查找正文"
+                  placeholderTextColor="#94a3b8"
+                  style={styles.searchInput}
+                  value={replaceQuery}
+                />
+                <Text style={[styles.noteSearchCount, replaceQuery.trim() && replaceMatches.length === 0 && styles.noteSearchCountEmpty]}>{replaceQuery.trim() ? replaceMatches.length : 0}</Text>
+              </View>
+              <View style={styles.searchBox}>
+                <RefreshCw color="#64748b" size={18} />
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={setReplaceValue}
+                  placeholder="替换为"
+                  placeholderTextColor="#94a3b8"
+                  style={styles.searchInput}
+                  value={replaceValue}
+                />
+              </View>
+              <ActionButton disabled={replaceMatches.length === 0} label="全部替换" onPress={replaceAllMatches}>
+                <RefreshCw color={replaceMatches.length === 0 ? "#cbd5e1" : "#0f172a"} size={16} />
+              </ActionButton>
             </View>
-            <View style={styles.searchBox}>
-              <RefreshCw color="#64748b" size={18} />
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={setReplaceValue}
-                placeholder="替换为"
-                placeholderTextColor="#94a3b8"
-                style={styles.searchInput}
-                value={replaceValue}
-              />
-            </View>
-            <ActionButton disabled={replaceMatches.length === 0} label="全部替换" onPress={replaceAllMatches}>
-              <RefreshCw color={replaceMatches.length === 0 ? "#cbd5e1" : "#0f172a"} size={16} />
-            </ActionButton>
-          </View>
+          ) : null}
           <TextInput
             multiline
             onChangeText={setContentMarkdown}
@@ -4564,6 +4573,18 @@ const EditMemoModal = ({
           ) : null}
         </ScrollView>
         <InsertTextModal onClose={() => setInsertTextOpen(false)} onInsert={insertManualText} visible={insertTextOpen} />
+        <NotebookPickerModal
+          activeNotebookId={notebookId}
+          notebookSortMode="manual"
+          notebooks={notebooks}
+          notebooksMemoCount={notebooks.reduce((total, notebook) => total + notebook.memoCount, 0)}
+          onClose={() => setNotebookPickerOpen(false)}
+          onSelect={(nextNotebookId) => {
+            setNotebookId(nextNotebookId);
+            setNotebookPickerOpen(false);
+          }}
+          visible={notebookPickerOpen}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -5052,8 +5073,8 @@ const SyncQueuePanel = ({
   );
 };
 
-const IconButton = ({ children, disabled = false, onPress }: { children: ReactNode; disabled?: boolean; onPress: () => void }) => (
-  <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.iconButton, disabled && styles.buttonDisabled]}>
+const IconButton = ({ accessibilityLabel, children, disabled = false, onPress }: { accessibilityLabel?: string; children: ReactNode; disabled?: boolean; onPress: () => void }) => (
+  <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.iconButton, disabled && styles.buttonDisabled]}>
     {children}
   </Pressable>
 );
@@ -5989,6 +6010,80 @@ const getSyncQueueStatusStyle = (status: MobileSyncQueueItem["status"]) => {
   return styles.syncStatusPending;
 };
 
+const detailMarkdownStyles = StyleSheet.create({
+  body: {
+    color: "#0f172a",
+    fontSize: 17,
+    lineHeight: 27,
+  },
+  blockquote: {
+    backgroundColor: "#f8fafc",
+    borderLeftColor: "#94a3b8",
+    borderLeftWidth: 3,
+    marginVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  bullet_list: {
+    marginVertical: 8,
+  },
+  code_inline: {
+    backgroundColor: "#f1f5f9",
+    borderRadius: 4,
+    color: "#334155",
+    fontSize: 15,
+  },
+  fence: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+    borderRadius: 8,
+    color: "#e2e8f0",
+    fontSize: 14,
+    marginVertical: 10,
+    padding: 12,
+  },
+  heading1: {
+    color: "#0f172a",
+    fontSize: 26,
+    fontWeight: "800",
+    lineHeight: 34,
+    marginBottom: 10,
+    marginTop: 14,
+  },
+  heading2: {
+    color: "#0f172a",
+    fontSize: 21,
+    fontWeight: "800",
+    lineHeight: 29,
+    marginBottom: 8,
+    marginTop: 18,
+  },
+  heading3: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 26,
+    marginBottom: 6,
+    marginTop: 14,
+  },
+  link: {
+    color: "#059669",
+  },
+  list_item: {
+    marginVertical: 3,
+  },
+  ordered_list: {
+    marginVertical: 8,
+  },
+  paragraph: {
+    marginBottom: 10,
+    marginTop: 0,
+  },
+  strong: {
+    fontWeight: "800",
+  },
+});
+
 const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: "#f8fafc",
@@ -6745,14 +6840,81 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   detailContent: {
-    padding: 18,
-    paddingBottom: 48,
+    paddingBottom: 112,
+    paddingHorizontal: 18,
+    paddingTop: 14,
   },
   detailTitle: {
     color: "#0f172a",
-    fontSize: 24,
+    fontSize: 23,
     fontWeight: "800",
-    lineHeight: 30,
+    lineHeight: 31,
+  },
+  detailHeader: {
+    alignItems: "center",
+    borderBottomColor: "#f1f5f9",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 52,
+    paddingHorizontal: 10,
+  },
+  detailHeaderButton: {
+    alignItems: "center",
+    borderRadius: 20,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  detailSyncStatus: {
+    backgroundColor: "#f1f5f9",
+    borderRadius: 999,
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  detailMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+    marginTop: 16,
+  },
+  detailNotebookName: {
+    color: "#64748b",
+    fontSize: 13,
+    marginRight: 8,
+    maxWidth: "42%",
+  },
+  detailTagsInline: {
+    color: "#64748b",
+    flex: 1,
+    fontSize: 13,
+  },
+  detailDivider: {
+    backgroundColor: "#e2e8f0",
+    height: 1,
+    marginHorizontal: -18,
+    marginTop: 20,
+    marginBottom: 18,
+  },
+  detailEditFab: {
+    alignItems: "center",
+    backgroundColor: "#10b981",
+    borderRadius: 28,
+    bottom: 28,
+    elevation: 6,
+    height: 56,
+    justifyContent: "center",
+    position: "absolute",
+    right: 22,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    width: 56,
   },
   detailMarkdown: {
     color: "#1f2937",
@@ -7076,6 +7238,36 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 18,
     paddingBottom: 48,
+  },
+  editorNotebookButton: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#e2e8f0",
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 48,
+    paddingHorizontal: 13,
+  },
+  editorNotebookButtonText: {
+    color: "#0f172a",
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  editorFindToggle: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 40,
+    paddingHorizontal: 4,
+  },
+  editorFindToggleText: {
+    color: "#475569",
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
   },
   revisionPill: {
     backgroundColor: "#ffffff",
