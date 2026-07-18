@@ -119,6 +119,7 @@ import {
 } from "../lib/local-mirror";
 import { AccountSecurityPanel } from "./AccountSecurityModal";
 import { beginEditorStartup, markStartup, recordEditorStartup } from "../lib/startup-performance";
+import EditorRuntimePrewarm from "../components/EditorRuntimePrewarm";
 import LocalTiptapEditor, { type LocalTiptapEditorRef } from "../components/LocalTiptapEditor";
 import { resolveMobileThemeStyles, useMobileTheme, type MobileResolvedTheme } from "../lib/mobile-theme";
 
@@ -336,6 +337,7 @@ export const WorkspaceScreen = () => {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [editingMemo, setEditingMemo] = useState<MemoDetail | null>(null);
   const [richEditingMemo, setRichEditingMemo] = useState<MemoDetail | null>(null);
+  const [editorRuntimeWarm, setEditorRuntimeWarm] = useState(false);
   const [notebookManagerOpen, setNotebookManagerOpen] = useState(false);
   const [tagsManagerOpen, setTagsManagerOpen] = useState(false);
   const [resourcesOpen, setResourcesOpen] = useState(false);
@@ -443,6 +445,26 @@ export const WorkspaceScreen = () => {
     const task = InteractionManager.runAfterInteractions(() => markStartup("workspace-interactive"));
     return () => task.cancel();
   }, []);
+
+  useEffect(() => {
+    if (!notebooksQuery.data || !memosQuery.data || editorRuntimeWarm) {
+      return;
+    }
+
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Keep first-screen work isolated from Chromium/WebKit startup. A short
+      // idle window is still early enough to finish before a normal edit flow.
+      timeout = setTimeout(() => setEditorRuntimeWarm(true), 600);
+    });
+
+    return () => {
+      task.cancel();
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [editorRuntimeWarm, memosQuery.data, notebooksQuery.data]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -1202,6 +1224,15 @@ export const WorkspaceScreen = () => {
         onClose={closeRichEditor}
         updateMutation={localUpdateMemoMutation}
       /> : null}
+      {editorRuntimeWarm ? (
+        <EditorRuntimePrewarm
+          dom={{
+            bounces: false,
+            scrollEnabled: false,
+            style: styles.editorRuntimePrewarm,
+          }}
+        />
+      ) : null}
       {notebookPickerOpen ? <NotebookPickerModal
         activeNotebookId={activeNotebookId}
         notebookSortMode={notebookSortMode}
@@ -6724,6 +6755,14 @@ const detailMarkdownStyles = StyleSheet.create({
 });
 
 const baseWorkspaceStyles = StyleSheet.create({
+  editorRuntimePrewarm: {
+    position: "absolute",
+    left: -2,
+    top: -2,
+    width: 1,
+    height: 1,
+    opacity: 0.01,
+  },
   safeArea: {
     backgroundColor: "#f8fafc",
     flex: 1,
