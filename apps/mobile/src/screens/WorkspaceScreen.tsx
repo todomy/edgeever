@@ -78,7 +78,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert, Pressable, Text, TextInput } from "../components/LocalizedText";
 import Markdown from "react-native-markdown-display";
-import { createExcerpt, docToMarkdown, docToText, getNotebookDescendantIds, markdownToDoc, type ApiToken, type AuthUser, type MemoDetail, type MemoRevision, type MemoSummary, type Notebook, type ResourceListItem, type TagSummary, type TiptapDoc } from "@edgeever/shared";
+import { buildRevisionDiffRows, createExcerpt, docToMarkdown, docToText, getNotebookDescendantIds, markdownToDoc, type ApiToken, type AuthUser, type MemoDetail, type MemoRevision, type MemoSummary, type Notebook, type ResourceListItem, type RevisionDiffRow, type TagSummary, type TiptapDoc } from "@edgeever/shared";
 import { clearMobileMemoDraft, clearMobileNewMemoDraft, readMobileMemoDraft, readMobileNewMemoDraft, writeMobileMemoDraft, writeMobileNewMemoDraft } from "../lib/mobile-drafts";
 import {
   readMobileImageCompressionEnabled,
@@ -1573,8 +1573,8 @@ const NotesView = ({
 
     <MemoList
       emptyAction={memoView === "notebook" && notebooks.length > 0 ? { label: "新建笔记", onPress: onCreate } : undefined}
-      emptyDescription={memoView === "trash" ? "删除的笔记会出现在这里" : notebooks.length > 0 ? "点击下方加号或这里创建第一条笔记" : "请先创建一个笔记本"}
-      emptyTitle={memoView === "trash" ? "回收站为空" : "暂无笔记"}
+      emptyDescription={memoView === "trash" ? "删除的笔记会显示在这里。" : memoFilterMode !== "all" ? "试试切换筛选条件，或调整搜索关键词。" : "先创建一条笔记，之后可以在这里快速预览、搜索和批量整理。"}
+      emptyTitle={memoView === "trash" ? "回收站为空" : memoFilterMode !== "all" ? "没有符合筛选的笔记" : "暂无笔记"}
       error={error}
       isError={isError}
       isLoading={isLoading}
@@ -4225,7 +4225,7 @@ const RevisionHistoryModal = ({
   });
 
   const requestRestoreRevision = (revision: MemoRevision) => {
-    Alert.alert("恢复此版本？", `将把笔记内容恢复到修订 ${revision.revision}。当前内容会作为新的修订保留。`, [
+    Alert.alert("恢复到这个历史版本", "当前内容会被这个历史版本替换，恢复后仍会产生新的历史记录。", [
       { text: "取消", style: "cancel" },
       {
         text: "恢复",
@@ -4237,100 +4237,103 @@ const RevisionHistoryModal = ({
   return (
     <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet" visible={Boolean(memo)}>
       <SafeAreaView style={styles.modalSafeArea}>
-        <View style={styles.modalHeader}>
-          <IconButton onPress={onClose}>
+        <View style={styles.managementHeader}>
+          <View style={styles.managementHeaderText}>
+            <View style={styles.managementTitleRow}>
+              <History color="#059669" size={19} />
+              <Text style={styles.managementTitle}>版本历史</Text>
+            </View>
+            <Text numberOfLines={1} style={styles.managementSubtitle}>{memo?.title?.trim() || DEFAULT_MEMO_TITLE}</Text>
+          </View>
+          <IconButton accessibilityLabel="关闭" onPress={onClose}>
             <X color="#0f172a" size={20} />
           </IconButton>
-          <Text numberOfLines={1} style={styles.modalTitle}>
-            修订历史
-          </Text>
-          <View style={styles.iconButtonPlaceholder} />
         </View>
 
-        {revisionsQuery.isLoading ? (
-          <View style={styles.centerState}>
-            <ActivityIndicator color="#0f172a" />
+        <ScrollView contentContainerStyle={styles.revisionHistoryContent}>
+          <View style={styles.revisionSummaryRow}>
+            <View style={styles.revisionSummaryText}>
+              <Text style={styles.settingsRowTitle}>{selectedRevision ? `版本 ${selectedRevision.revision} 与当前内容` : "未选择历史版本"}</Text>
+              {selectedRevision ? <Text style={styles.revisionChangeBadge}>{`${changedLines} 行有变化`}</Text> : null}
+            </View>
+            {selectedRevision ? (
+              <ActionButton disabled={restoreRevisionMutation.isPending || Boolean(memo?.isDeleted)} label={restoreRevisionMutation.isPending ? "恢复中" : "恢复该版本"} onPress={() => requestRestoreRevision(selectedRevision)}>
+                <RotateCcw color="#0f172a" size={16} />
+              </ActionButton>
+            ) : null}
           </View>
-        ) : revisions.length === 0 ? (
-          <View style={styles.centerState}>
-            <History color="#94a3b8" size={32} />
-            <Text style={styles.emptyTitle}>暂无历史版本</Text>
-            <Text style={styles.mutedText}>笔记保存后产生的修订会显示在这里</Text>
-          </View>
-        ) : (
-          <ScrollView contentContainerStyle={styles.editorForm}>
-            <Text style={styles.detailTitle}>{memo?.title?.trim() || DEFAULT_MEMO_TITLE}</Text>
-            <Text style={styles.sectionSubtitle}>{selectedRevision ? `修订 ${selectedRevision.revision} · ${changedLines} 行差异` : "请选择一个修订"}</Text>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <Text style={styles.revisionTimelineLabel}>历史记录</Text>
+          {revisionsQuery.isLoading ? (
+            <View style={styles.revisionTimelineState}>
+              <Text style={styles.mutedText}>加载中</Text>
+            </View>
+          ) : revisionsQuery.isError ? (
+            <View style={styles.revisionTimelineState}>
+              <Text style={styles.errorText}>加载失败</Text>
+              <Text style={styles.revisionTimelineError}>
+                {revisionsQuery.error instanceof Error ? revisionsQuery.error.message : "请稍后重试"}
+              </Text>
+              <ActionButton label="重试" onPress={() => void revisionsQuery.refetch()}>
+                <RotateCcw color="#0f172a" size={16} />
+              </ActionButton>
+            </View>
+          ) : revisions.length === 0 ? (
+            <View style={styles.revisionTimelineState}>
+              <Text style={styles.mutedText}>暂无历史版本</Text>
+            </View>
+          ) : (
+            <View style={styles.revisionTimeline}>
               {revisions.map((revision) => (
                 <Pressable
                   key={revision.id}
                   onPress={() => setSelectedRevisionId(revision.id)}
                   style={[styles.revisionPill, selectedRevision?.id === revision.id && styles.revisionPillActive]}
                 >
-                  <Text style={[styles.revisionPillTitle, selectedRevision?.id === revision.id && styles.revisionPillTitleActive]}>修订 {revision.revision}</Text>
+                  <Text style={[styles.revisionPillTitle, selectedRevision?.id === revision.id && styles.revisionPillTitleActive]}>{`版本 ${revision.revision}`}</Text>
                   <Text style={[styles.revisionPillMeta, selectedRevision?.id === revision.id && styles.revisionPillTitleActive]}>
                     {formatDate(revision.createdAt, localePreference)} · {formatRevisionActor(revision.createdBy)}
                   </Text>
                 </Pressable>
               ))}
-            </ScrollView>
+            </View>
+          )}
 
-            {selectedRevision ? (
-              <>
-                <ActionButton disabled={restoreRevisionMutation.isPending || Boolean(memo?.isDeleted)} label={restoreRevisionMutation.isPending ? "恢复中" : "恢复此版本"} onPress={() => requestRestoreRevision(selectedRevision)}>
-                  <RotateCcw color="#0f172a" size={16} />
-                </ActionButton>
-                <View style={styles.revisionPreviewBlock}>
-                  <Text style={styles.label}>历史版本</Text>
-                  <RevisionDiffPreview rows={diffRows?.leftRows ?? []} tone="history" />
-                </View>
-                <View style={styles.revisionPreviewBlock}>
-                  <Text style={styles.label}>当前内容</Text>
-                  <RevisionDiffPreview rows={diffRows?.rightRows ?? []} tone="current" />
-                </View>
-              </>
-            ) : null}
-            {restoreRevisionMutation.error ? (
-              <Text style={styles.errorText}>{restoreRevisionMutation.error instanceof Error ? restoreRevisionMutation.error.message : "恢复失败"}</Text>
-            ) : null}
-          </ScrollView>
-        )}
+          {selectedRevision ? <RevisionComparisonTable leftRows={diffRows?.leftRows ?? []} rightRows={diffRows?.rightRows ?? []} /> : null}
+          {restoreRevisionMutation.error ? (
+            <Text style={styles.errorText}>{restoreRevisionMutation.error instanceof Error ? restoreRevisionMutation.error.message : "恢复失败"}</Text>
+          ) : null}
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
 };
 
-const RevisionDiffPreview = ({ rows, tone }: { rows: DiffRow[]; tone: "history" | "current" }) => {
-  const hasContent = rows.some((row) => row.text);
-
-  if (!hasContent) {
-    return <Text style={styles.mutedText}>没有正文内容</Text>;
-  }
+const RevisionComparisonTable = ({ leftRows, rightRows }: { leftRows: RevisionDiffRow[]; rightRows: RevisionDiffRow[] }) => {
+  const hasContent = leftRows.some((row) => row.text) || rightRows.some((row) => row.text);
 
   return (
-    <View style={styles.revisionDiffTable}>
-      {rows.map((row) => {
-        const changed = row.state === "changed";
-
-        return (
-          <View
-            key={row.lineNumber}
-            style={[
-              styles.revisionDiffRow,
-              changed && tone === "history" && styles.revisionDiffRowHistory,
-              changed && tone === "current" && styles.revisionDiffRowCurrent,
-            ]}
-          >
-            <Text style={styles.revisionDiffLineNumber}>{row.lineNumber}</Text>
-            <Text style={[styles.revisionDiffText, row.state === "empty" && styles.revisionDiffTextEmpty]}>{row.text || " "}</Text>
-          </View>
-        );
-      })}
+    <View style={styles.revisionComparisonTable}>
+      <View style={styles.revisionComparisonHeader}>
+        <Text style={styles.revisionComparisonHeaderText}>历史版本</Text>
+        <Text style={styles.revisionComparisonHeaderText}>当前内容</Text>
+      </View>
+      {hasContent ? leftRows.map((leftRow, index) => (
+        <View key={`${leftRow.lineNumber ?? "empty"}-${index}`} style={styles.revisionComparisonRow}>
+          <RevisionDiffCell row={leftRow} tone="history" />
+          <RevisionDiffCell row={rightRows[index] ?? { lineNumber: null, text: "", state: "empty" }} tone="current" />
+        </View>
+      )) : <Text style={styles.revisionComparisonEmpty}>空笔记</Text>}
     </View>
   );
 };
+
+const RevisionDiffCell = ({ row, tone }: { row: RevisionDiffRow; tone: "history" | "current" }) => (
+  <View style={[styles.revisionComparisonCell, tone === "current" && styles.revisionComparisonCellCurrent, row.state === "changed" && (tone === "history" ? styles.revisionDiffRowHistory : styles.revisionDiffRowCurrent)]}>
+    <Text style={styles.revisionComparisonLineNumber}>{row.lineNumber ?? ""}</Text>
+    <Text style={[styles.revisionComparisonText, row.state === "empty" && styles.revisionDiffTextEmpty]}>{row.text || " "}</Text>
+  </View>
+);
 
 const MemoDetailModal = ({
   isDeleting,
@@ -4399,7 +4402,7 @@ const MemoDetailModal = ({
             <ChevronLeft color="#475569" size={21} />
           </Pressable>
           <Text style={styles.detailSyncStatus}>{isSaving ? "保存中" : "已同步"}</Text>
-          {memo?.isDeleted ? (
+          {memo ? (
             <Pressable accessibilityLabel="笔记操作" accessibilityRole="button" onPress={() => setActionsOpen(true)} style={styles.detailHeaderButton}>
               <MoreHorizontal color="#475569" size={21} />
             </Pressable>
@@ -4482,8 +4485,8 @@ const MemoDetailModal = ({
                     <ActionSheetItem icon={<Code color="#0f172a" size={18} />} label="Markdown 源代码编辑" onPress={() => closeActionsAndRun(() => onEdit(memo))} />
                   </>
                 )}
-                <ActionSheetItem icon={<Search color="#0f172a" size={18} />} label="查找当前笔记" onPress={() => closeActionsAndRun(() => setSearchOpen((open) => !open))} />
-                <ActionSheetItem icon={<History color="#0f172a" size={18} />} label="修订历史" onPress={() => closeActionsAndRun(() => onOpenRevisions(memo))} />
+                <ActionSheetItem icon={<Search color="#0f172a" size={18} />} label="搜索当前笔记" onPress={() => closeActionsAndRun(() => setSearchOpen((open) => !open))} />
+                <ActionSheetItem icon={<History color="#0f172a" size={18} />} label="版本历史" onPress={() => closeActionsAndRun(() => onOpenRevisions(memo))} />
                 <ActionSheetItem icon={<Archive color="#0f172a" size={18} />} label="资源" onPress={() => closeActionsAndRun(onOpenResources)} />
                 <ActionSheetItem danger disabled={isDeleting} icon={<Trash2 color="#b91c1c" size={18} />} label={isDeleting ? "删除中" : memo.isDeleted ? "永久删除" : "删除"} onPress={() => closeActionsAndRun(() => onDelete(memo))} />
               </Pressable>
@@ -5310,23 +5313,25 @@ const MemoList = ({
 }) => {
   if (isLoading) {
     return (
-      <View style={styles.centerState}>
-        <ActivityIndicator color="#0f172a" />
+      <View style={styles.memoListStateWrap}>
+        <Text style={styles.memoListLoadingText}>正在拉取最新笔记</Text>
       </View>
     );
   }
 
-  if (isError) {
+  if (isError && memos.length === 0) {
     return (
-      <View style={styles.centerState}>
-        <Text style={styles.errorText}>加载失败</Text>
-        <Text style={styles.mutedText}>{error instanceof Error ? error.message : "请稍后再试"}</Text>
+      <View style={styles.memoListStateWrap}>
+        <View style={styles.memoListErrorCard}>
+          <Text style={styles.memoListErrorTitle}>暂时没有拉到笔记</Text>
+          <Text style={styles.memoListErrorDescription}>网络或 PWA 后台恢复可能短暂中断了同步。这里不会把它当作空笔记本。</Text>
         {onRetry ? (
-          <Pressable accessibilityLabel="重试加载" accessibilityRole="button" onPress={onRetry} style={styles.emptyActionButton}>
-            <RotateCcw color="#ffffff" size={17} />
-            <Text style={styles.emptyActionButtonText}>重试</Text>
+          <Pressable accessibilityLabel="重试加载" accessibilityRole="button" onPress={onRetry} style={styles.memoListRetryButton}>
+            <RotateCcw color="#92400e" size={17} />
+            <Text style={styles.memoListRetryText}>重试</Text>
           </Pressable>
         ) : null}
+        </View>
       </View>
     );
   }
@@ -5354,8 +5359,7 @@ const MemoList = ({
         />
       )}
       ListEmptyComponent={
-        <View style={styles.centerState}>
-          <BookOpen color="#94a3b8" size={32} />
+        <View style={styles.memoListEmptyCard}>
           <Text style={styles.emptyTitle}>{emptyTitle}</Text>
           <Text style={styles.mutedText}>{emptyDescription}</Text>
           {emptyAction ? (
@@ -6674,44 +6678,6 @@ const buildMcpRemoteConfig = (baseUrl: string, token: string) =>
     2
   );
 
-type DiffRow = {
-  lineNumber: number;
-  text: string;
-  state: "same" | "changed" | "empty";
-};
-
-const buildRevisionDiffRows = (left: string, right: string) => {
-  const leftLines = left.split("\n");
-  const rightLines = right.split("\n");
-  const maxLines = Math.max(leftLines.length, rightLines.length, 1);
-  const leftRows: DiffRow[] = [];
-  const rightRows: DiffRow[] = [];
-  let changed = 0;
-
-  for (let index = 0; index < maxLines; index += 1) {
-    const leftText = leftLines[index] ?? "";
-    const rightText = rightLines[index] ?? "";
-    const isChanged = leftText !== rightText;
-
-    if (isChanged) {
-      changed += 1;
-    }
-
-    leftRows.push({
-      lineNumber: index + 1,
-      text: leftText,
-      state: isChanged ? "changed" : leftText ? "same" : "empty",
-    });
-    rightRows.push({
-      lineNumber: index + 1,
-      text: rightText,
-      state: isChanged ? "changed" : rightText ? "same" : "empty",
-    });
-  }
-
-  return { changed, leftRows, rightRows };
-};
-
 const formatRevisionActor = (actor: string) => {
   if (actor.startsWith("user:")) {
     return "user";
@@ -7449,6 +7415,66 @@ const baseWorkspaceStyles = StyleSheet.create({
   emptyList: {
     flexGrow: 1,
     paddingBottom: 22,
+  },
+  memoListStateWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 16,
+  },
+  memoListLoadingText: {
+    color: "#64748b",
+    fontSize: 14,
+    paddingHorizontal: 8,
+  },
+  memoListErrorCard: {
+    alignItems: "center",
+    backgroundColor: "#fffbeb",
+    borderColor: "#fcd34d",
+    borderRadius: 8,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 34,
+  },
+  memoListErrorTitle: {
+    color: "#451a03",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  memoListErrorDescription: {
+    color: "#92400e",
+    fontSize: 12,
+    lineHeight: 20,
+    marginTop: 8,
+    maxWidth: 300,
+    textAlign: "center",
+  },
+  memoListRetryButton: {
+    alignItems: "center",
+    backgroundColor: "#fef3c7",
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 7,
+    marginTop: 16,
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  memoListRetryText: {
+    color: "#92400e",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  memoListEmptyCard: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: "#ffffff",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    marginHorizontal: 12,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 34,
   },
   memoCard: {
     backgroundColor: "#ffffff",
@@ -8738,20 +8764,74 @@ const baseWorkspaceStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+  revisionHistoryContent: {
+    gap: 12,
+    padding: 16,
+    paddingBottom: 48,
+  },
+  revisionSummaryRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+  },
+  revisionSummaryText: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
+  },
+  revisionChangeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#fffbeb",
+    borderColor: "#fde68a",
+    borderRadius: 999,
+    borderWidth: 1,
+    color: "#92400e",
+    fontSize: 11,
+    fontWeight: "700",
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  revisionTimelineLabel: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  revisionTimeline: {
+    gap: 7,
+  },
+  revisionTimelineState: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 32,
+  },
+  revisionTimelineError: {
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+  },
   revisionPill: {
     backgroundColor: "#ffffff",
     borderColor: "#e2e8f0",
     borderRadius: 8,
     borderWidth: 1,
-    marginRight: 8,
-    minHeight: 58,
-    minWidth: 132,
+    minHeight: 68,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
   revisionPillActive: {
-    backgroundColor: "#0f172a",
-    borderColor: "#0f172a",
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
   },
   revisionPillTitle: {
     color: "#0f172a",
@@ -8759,7 +8839,7 @@ const baseWorkspaceStyles = StyleSheet.create({
     fontWeight: "800",
   },
   revisionPillTitleActive: {
-    color: "#ffffff",
+    color: "#047857",
   },
   revisionPillMeta: {
     color: "#64748b",
@@ -8767,54 +8847,77 @@ const baseWorkspaceStyles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 4,
   },
-  revisionPreviewBlock: {
+  revisionComparisonTable: {
     backgroundColor: "#ffffff",
     borderColor: "#e2e8f0",
     borderRadius: 8,
     borderWidth: 1,
-    gap: 8,
-    padding: 12,
+    overflow: "hidden",
+  },
+  revisionComparisonHeader: {
+    backgroundColor: "#f8fafc",
+    flexDirection: "row",
+  },
+  revisionComparisonHeaderText: {
+    color: "#475569",
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "800",
+    padding: 10,
+  },
+  revisionComparisonRow: {
+    alignItems: "stretch",
+    borderBottomColor: "#f1f5f9",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    minHeight: 28,
+  },
+  revisionComparisonCell: {
+    flex: 1,
+    flexDirection: "row",
+    minWidth: 0,
+  },
+  revisionComparisonCellCurrent: {
+    borderLeftColor: "#e2e8f0",
+    borderLeftWidth: 1,
+  },
+  revisionComparisonLineNumber: {
+    backgroundColor: "#f8fafc",
+    borderRightColor: "#e2e8f0",
+    borderRightWidth: 1,
+    color: "#94a3b8",
+    fontSize: 10,
+    minWidth: 28,
+    paddingHorizontal: 4,
+    paddingTop: 6,
+    textAlign: "right",
+  },
+  revisionComparisonText: {
+    color: "#334155",
+    flex: 1,
+    fontFamily: Platform.select({ android: "monospace", ios: "Menlo" }),
+    fontSize: 11,
+    lineHeight: 17,
+    minWidth: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+  },
+  revisionComparisonEmpty: {
+    color: "#94a3b8",
+    fontSize: 13,
+    padding: 24,
+    textAlign: "center",
   },
   revisionPreviewText: {
     color: "#334155",
     fontSize: 13,
     lineHeight: 20,
   },
-  revisionDiffTable: {
-    borderColor: "#e2e8f0",
-    borderRadius: 8,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  revisionDiffRow: {
-    borderBottomColor: "#f1f5f9",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    minHeight: 28,
-  },
   revisionDiffRowHistory: {
-    backgroundColor: "#fffbeb",
+    backgroundColor: "#fff1f2",
   },
   revisionDiffRowCurrent: {
     backgroundColor: "#ecfdf5",
-  },
-  revisionDiffLineNumber: {
-    borderRightColor: "#e2e8f0",
-    borderRightWidth: 1,
-    color: "#94a3b8",
-    fontSize: 11,
-    minWidth: 42,
-    paddingHorizontal: 8,
-    paddingTop: 6,
-    textAlign: "right",
-  },
-  revisionDiffText: {
-    color: "#334155",
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
   },
   revisionDiffTextEmpty: {
     color: "#94a3b8",
