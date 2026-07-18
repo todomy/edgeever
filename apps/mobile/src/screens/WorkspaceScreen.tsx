@@ -72,7 +72,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { createExcerpt, docToText, getNotebookDescendantIds, markdownToDoc, type ApiToken, type MemoDetail, type MemoRevision, type MemoSummary, type Notebook, type ResourceListItem, type TagSummary } from "@edgeever/shared";
 import { clearMobileMemoDraft, readMobileMemoDraft, writeMobileMemoDraft } from "../lib/mobile-drafts";
 import {
@@ -308,6 +308,7 @@ type MarkdownAction = "heading" | "bold" | "italic" | "bullet" | "checklist" | "
 export const WorkspaceScreen = () => {
   const { client, session, signOut } = useSession();
   const queryClient = useQueryClient();
+  const safeAreaInsets = useSafeAreaInsets();
   const syncQueueScope = session?.baseUrl ?? "";
   const dataScope = createMobileDataScope(session?.baseUrl ?? "", session?.user?.id);
   const [activeView, setActiveView] = useState<MobileView>("notes");
@@ -1073,43 +1074,31 @@ export const WorkspaceScreen = () => {
 
   return (
     <MobileLocaleContext.Provider value={localePreference}>
-      <SafeAreaView style={styles.safeArea}>
-        <AppHeader instance={session?.baseUrl ?? ""} onRefresh={refresh} onSignOut={signOut} />
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
 
       {activeView === "notes" ? (
         <NotesView
           activeNotebook={activeNotebook}
-          activeNotebookId={activeNotebookId}
           isLoading={memosQuery.isLoading}
           isRefreshing={isRefreshing}
-          memoCount={memosQuery.data?.totalCount ?? memos.length}
           memoFilterMode={memoFilterMode}
           memoListDensity={memoListDensity}
-          memoSortMode={memoSortMode}
           memoView={memoView}
           memos={memos}
-          notebookSortMode={notebookSortMode}
           notebooks={notebooks}
-          notebooksMemoCount={memoCount}
           onCreate={() => setCreateOpen(true)}
-          onEmptyTrash={handleEmptyTrash}
           onFilterModeChange={setMemoFilterMode}
-          onMemoListDensityChange={handleMemoListDensityChange}
           onOpenActions={() => setNotesActionsOpen(true)}
           onOpenNotebookPicker={() => setNotebookPickerOpen(true)}
           onOpenSearch={() => setActiveView("search")}
-          onOpenTemplates={() => setTemplatesOpen(true)}
           onMemoPress={handleMemoPress}
           onMemoLongPress={(memo) => setMemoActionsMemo(memo)}
           onRefresh={refresh}
-          onSelectNotebook={setActiveNotebookId}
           onSetMemoView={setMemoView}
-          onSortModeChange={setMemoSortMode}
           selectionMode={selectionMode}
           selectedMemoIds={selectedMemoIds}
           error={memosQuery.error}
           isError={memosQuery.isError}
-          isEmptyingTrash={emptyTrashMutation.isPending}
         />
       ) : null}
 
@@ -1344,6 +1333,7 @@ export const WorkspaceScreen = () => {
 
       {activeView === "notes" && selectionMode ? (
         <SelectionActionBar
+          bottomOffset={52 + safeAreaInsets.bottom}
           canMerge={memoView !== "trash" && selectedMemoIds.size >= 2}
           canMove={memoView !== "trash" && selectedMemoIds.size > 0}
           isBusy={deleteMemosMutation.isPending || moveMemosMutation.isPending || pinMemosMutation.isPending || mergeMemosMutation.isPending}
@@ -1361,11 +1351,13 @@ export const WorkspaceScreen = () => {
         />
       ) : null}
 
-      <View style={styles.bottomNav}>
+      <View
+        style={[styles.bottomNav, { height: 52 + safeAreaInsets.bottom, paddingBottom: safeAreaInsets.bottom }]}
+      >
         <BottomNavItem
           active={activeView === "notes"}
           icon={<Home color={activeView === "notes" ? "#0f172a" : "#64748b"} size={20} />}
-          label="笔记"
+          label="首页"
           onPress={() => setActiveView("notes")}
         />
         <Pressable
@@ -1388,192 +1380,98 @@ export const WorkspaceScreen = () => {
   );
 };
 
-const AppHeader = ({ instance, onRefresh, onSignOut }: { instance: string; onRefresh: () => void; onSignOut: () => void }) => (
-  <View style={styles.header}>
-    <View>
-      <Text style={styles.title}>EdgeEver</Text>
-      <Text numberOfLines={1} style={styles.instance}>
-        {instance}
-      </Text>
-    </View>
-
-    <View style={styles.headerActions}>
-      <IconButton onPress={onRefresh}>
-        <RefreshCw color="#0f172a" size={18} />
-      </IconButton>
-      <IconButton onPress={onSignOut}>
-        <LogOut color="#0f172a" size={18} />
-      </IconButton>
-    </View>
-  </View>
-);
-
 const NotesView = ({
   activeNotebook,
-  activeNotebookId,
   error,
   isError,
   isLoading,
   isRefreshing,
-  memoCount,
   memoFilterMode,
   memoListDensity,
-  memoSortMode,
   memoView,
   memos,
-  notebookSortMode,
   notebooks,
-  notebooksMemoCount,
   onCreate,
-  onEmptyTrash,
   onFilterModeChange,
-  onMemoListDensityChange,
   onOpenActions,
   onOpenNotebookPicker,
   onOpenSearch,
   onMemoLongPress,
   onMemoPress,
-  onOpenTemplates,
   onRefresh,
-  onSelectNotebook,
   onSetMemoView,
-  onSortModeChange,
   selectedMemoIds,
   selectionMode,
-  isEmptyingTrash,
 }: {
   activeNotebook: Notebook | null;
-  activeNotebookId: string;
   error: unknown;
   isError: boolean;
   isLoading: boolean;
   isRefreshing: boolean;
-  memoCount: number;
   memoFilterMode: MemoFilterMode;
   memoListDensity: MobileMemoListDensity;
-  memoSortMode: MemoSortMode;
   memoView: MemoView;
   memos: MemoSummary[];
-  notebookSortMode: MobileNotebookSortMode;
   notebooks: Notebook[];
-  notebooksMemoCount: number;
   onCreate: () => void;
-  onEmptyTrash: () => void;
   onFilterModeChange: (filterMode: MemoFilterMode) => void;
-  onMemoListDensityChange: (density: MobileMemoListDensity) => void;
   onOpenActions: () => void;
   onOpenNotebookPicker: () => void;
   onOpenSearch: () => void;
   onMemoLongPress: (memo: MemoSummary) => void;
   onMemoPress: (memoId: string) => void;
-  onOpenTemplates: () => void;
   onRefresh: () => void;
-  onSelectNotebook: (notebookId: string) => void;
   onSetMemoView: (memoView: MemoView) => void;
-  onSortModeChange: (sortMode: MemoSortMode) => void;
   selectionMode: boolean;
   selectedMemoIds: Set<string>;
-  isEmptyingTrash: boolean;
 }) => {
-  const [collapsedNotebookIds, setCollapsedNotebookIds] = useState<Set<string>>(() => new Set());
-  const notebookOptions = flattenNotebooks(notebooks, notebookSortMode);
-  const childNotebookIds = getNotebookParentIdSet(notebooks);
-  const visibleNotebookOptions = filterCollapsedNotebookOptions(notebookOptions, collapsedNotebookIds);
-  const toggleNotebookCollapsed = (notebookId: string) => {
-    setCollapsedNotebookIds((current) => {
-      const next = new Set(current);
-      if (next.has(notebookId)) {
-        next.delete(notebookId);
-      } else {
-        next.add(notebookId);
-      }
-      return next;
-    });
-  };
-
   return (
     <View style={styles.viewBody}>
-      {memoView === "notebook" ? (
-        <View style={styles.tabs}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <NotebookPill active={activeNotebookId === ALL_NOTES_ID} label="全部笔记" memoCount={notebooksMemoCount} onPress={() => onSelectNotebook(ALL_NOTES_ID)} />
-            {visibleNotebookOptions.map(({ depth, notebook }) => (
-              <NotebookPill
-                active={activeNotebookId === notebook.id}
-                collapsed={collapsedNotebookIds.has(notebook.id)}
-                hasChildren={childNotebookIds.has(notebook.id)}
-                key={notebook.id}
-                label={`${"  ".repeat(depth)}${depth > 0 ? "└ " : ""}${notebook.name}`}
-                memoCount={notebook.memoCount}
-                onPress={() => onSelectNotebook(notebook.id)}
-                onToggleCollapse={() => toggleNotebookCollapsed(notebook.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-      ) : null}
-
-    <View style={styles.contentHeader}>
-      <View>
-        <Text style={styles.sectionTitle}>{memoView === "trash" ? "回收站" : activeNotebook?.name ?? "全部笔记"}</Text>
-        <Text style={styles.sectionSubtitle}>{memoCount} 条笔记</Text>
-      </View>
-      <View style={styles.contentActions}>
-        {memoView === "notebook" ? (
-          <Pressable accessibilityRole="button" onPress={onOpenNotebookPicker} style={styles.secondaryIconButton}>
-            <Folder color="#0f172a" size={18} />
-          </Pressable>
-        ) : null}
-        <Pressable accessibilityRole="button" onPress={onOpenSearch} style={styles.secondaryIconButton}>
-          <Search color="#0f172a" size={18} />
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={onOpenActions} style={styles.secondaryIconButton}>
-          <MoreHorizontal color="#0f172a" size={18} />
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => onSetMemoView(memoView === "trash" ? "notebook" : "trash")} style={styles.secondaryIconButton}>
-          {memoView === "trash" ? <BookOpen color="#0f172a" size={18} /> : <Trash2 color="#0f172a" size={18} />}
-        </Pressable>
-        {memoView === "notebook" ? (
-          <>
-            <Pressable accessibilityRole="button" onPress={onOpenTemplates} style={styles.secondaryIconButton}>
-              <FileText color="#0f172a" size={18} />
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={onCreate} style={styles.primaryIconButton}>
-              <Plus color="#ffffff" size={20} />
-            </Pressable>
-          </>
-        ) : (
+      <View style={styles.mobileListHeader}>
+        <View style={styles.mobileListTitleRow}>
           <Pressable
             accessibilityRole="button"
-            disabled={isEmptyingTrash || memoCount === 0}
-            onPress={onEmptyTrash}
-            style={[styles.dangerIconButton, (isEmptyingTrash || memoCount === 0) && styles.buttonDisabled]}
+            onPress={memoView === "trash" ? () => onSetMemoView("notebook") : onOpenNotebookPicker}
+            style={styles.mobileNotebookTitleButton}
           >
-            <Trash2 color="#b91c1c" size={18} />
+            {memoView === "trash" ? <ChevronLeft color="#475569" size={18} /> : null}
+            <Text numberOfLines={1} style={styles.mobileNotebookTitle}>
+              {memoView === "trash" ? "回收站" : activeNotebook?.name ?? "全部笔记"}
+            </Text>
+            {memoView === "notebook" ? <ChevronDown color="#64748b" size={16} /> : null}
           </Pressable>
-        )}
-      </View>
-    </View>
+          <Pressable accessibilityRole="button" onPress={onOpenActions} style={styles.mobileMoreButton}>
+            <MoreHorizontal color="#475569" size={20} />
+          </Pressable>
+        </View>
 
-    {memoView === "notebook" ? (
-      <View style={styles.listControls}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <OptionPill active={memoFilterMode === "all"} label="全部" onPress={() => onFilterModeChange("all")} />
-          <OptionPill active={memoFilterMode === "pinned"} label="置顶" onPress={() => onFilterModeChange(memoFilterMode === "pinned" ? "all" : "pinned")} />
-          <OptionPill active={memoFilterMode === "tagged"} label="有标签" onPress={() => onFilterModeChange(memoFilterMode === "tagged" ? "all" : "tagged")} />
-          <OptionPill active={memoFilterMode === "untagged"} label="无标签" onPress={() => onFilterModeChange(memoFilterMode === "untagged" ? "all" : "untagged")} />
-        </ScrollView>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <OptionPill active={memoSortMode === "updated-desc"} label="最近更新" onPress={() => onSortModeChange("updated-desc")} />
-          <OptionPill active={memoSortMode === "created-desc"} label="创建时间" onPress={() => onSortModeChange("created-desc")} />
-          <OptionPill active={memoSortMode === "title-asc"} label="标题 A-Z" onPress={() => onSortModeChange("title-asc")} />
-        </ScrollView>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <OptionPill active={memoListDensity === "preview"} label="预览" onPress={() => onMemoListDensityChange("preview")} />
-          <OptionPill active={memoListDensity === "compact"} label="紧凑" onPress={() => onMemoListDensityChange("compact")} />
-        </ScrollView>
+        {memoView === "notebook" ? (
+          <View style={styles.mobileSearchRow}>
+            <Pressable accessibilityRole="button" onPress={onOpenSearch} style={styles.mobileSearchButton}>
+              <Search color="#64748b" size={17} />
+              <Text style={styles.mobileSearchPlaceholder}>搜索笔记</Text>
+            </Pressable>
+            <MobileFilterButton
+              active={memoFilterMode === "pinned"}
+              icon={<Sparkles color={memoFilterMode === "pinned" ? "#ffffff" : "#475569"} size={18} />}
+              label="置顶"
+              onPress={() => onFilterModeChange(memoFilterMode === "pinned" ? "all" : "pinned")}
+            />
+            <MobileFilterButton
+              active={memoFilterMode === "tagged"}
+              icon={<Tag color={memoFilterMode === "tagged" ? "#ffffff" : "#475569"} size={18} />}
+              label="有标签"
+              onPress={() => onFilterModeChange(memoFilterMode === "tagged" ? "all" : "tagged")}
+            />
+            <MobileFilterButton
+              active={memoFilterMode === "untagged"}
+              icon={<Tag color={memoFilterMode === "untagged" ? "#ffffff" : "#475569"} size={18} />}
+              label="无标签"
+              onPress={() => onFilterModeChange(memoFilterMode === "untagged" ? "all" : "untagged")}
+            />
+          </View>
+        ) : null}
       </View>
-    ) : null}
 
     <MemoList
       emptyAction={memoView === "notebook" && notebooks.length > 0 ? { label: "新建笔记", onPress: onCreate } : undefined}
@@ -4831,6 +4729,7 @@ const MoveSelectionModal = ({
 };
 
 const SelectionActionBar = ({
+  bottomOffset,
   canMerge,
   canMove,
   isBusy,
@@ -4846,6 +4745,7 @@ const SelectionActionBar = ({
   selectionToggleLabel,
   selectedCount,
 }: {
+  bottomOffset: number;
   canMerge: boolean;
   canMove: boolean;
   isBusy: boolean;
@@ -4861,7 +4761,7 @@ const SelectionActionBar = ({
   selectionToggleLabel: string;
   selectedCount: number;
 }) => (
-  <View style={styles.selectionBar}>
+  <View style={[styles.selectionBar, { bottom: bottomOffset }]}>
     <View style={styles.selectionBarHeader}>
       <Text style={styles.selectionCount}>已选 {selectedCount} 条</Text>
       <View style={styles.selectionHeaderActions}>
@@ -5038,46 +4938,21 @@ const NotebookPicker = ({
   );
 };
 
-const NotebookPill = ({
-  active,
-  collapsed,
-  hasChildren,
-  label,
-  memoCount,
-  onPress,
-  onToggleCollapse,
-}: {
-  active: boolean;
-  collapsed?: boolean;
-  hasChildren?: boolean;
-  label: string;
-  memoCount: number;
-  onPress: () => void;
-  onToggleCollapse?: () => void;
-}) => (
-  <Pressable onPress={onPress} style={[styles.notebookPill, active && styles.notebookPillActive]}>
-    {hasChildren ? (
-      <Pressable
-        accessibilityRole="button"
-        onPress={(event) => {
-          event.stopPropagation();
-          onToggleCollapse?.();
-        }}
-        style={styles.notebookPillToggle}
-      >
-        {collapsed ? <ChevronRight color={active ? "#ffffff" : "#64748b"} size={14} /> : <ChevronDown color={active ? "#ffffff" : "#64748b"} size={14} />}
-      </Pressable>
-    ) : null}
-    <Text numberOfLines={1} style={[styles.notebookPillText, active && styles.notebookPillTextActive]}>
-      {label}
-    </Text>
-    <Text style={[styles.notebookPillCount, active && styles.notebookPillTextActive]}>{memoCount}</Text>
-  </Pressable>
-);
-
 const OptionPill = ({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) => (
   <Pressable onPress={onPress} style={[styles.optionPill, active && styles.optionPillActive]}>
     <Text style={[styles.optionPillText, active && styles.optionPillTextActive]}>{label}</Text>
+  </Pressable>
+);
+
+const MobileFilterButton = ({ active, icon, label, onPress }: { active: boolean; icon: ReactNode; label: string; onPress: () => void }) => (
+  <Pressable
+    accessibilityLabel={label}
+    accessibilityRole="button"
+    accessibilityState={{ selected: active }}
+    onPress={onPress}
+    style={[styles.mobileFilterButton, active && styles.mobileFilterButtonActive]}
+  >
+    {icon}
   </Pressable>
 );
 
@@ -5105,9 +4980,7 @@ const MemoCard = memo(function MemoCard({
           <View style={[styles.selectionIndicator, selected && styles.selectionIndicatorActive]}>
             {selected ? <Check color="#ffffff" size={14} /> : null}
           </View>
-        ) : (
-          <FileText color="#64748b" size={18} />
-        )}
+        ) : null}
         <Text numberOfLines={1} style={styles.memoTitle}>
           {memo.title?.trim() || DEFAULT_MEMO_TITLE}
         </Text>
@@ -6123,29 +5996,7 @@ const styles = StyleSheet.create({
   },
   viewBody: {
     flex: 1,
-    paddingBottom: 64,
-  },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingTop: 6,
-  },
-  title: {
-    color: "#0f172a",
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  instance: {
-    color: "#64748b",
-    fontSize: 12,
-    marginTop: 2,
-    maxWidth: 230,
-  },
-  headerActions: {
-    flexDirection: "row",
-    gap: 8,
+    paddingBottom: 0,
   },
   iconButton: {
     alignItems: "center",
@@ -6161,51 +6012,78 @@ const styles = StyleSheet.create({
     height: 38,
     width: 38,
   },
-  modalHeaderActions: {
+  mobileListHeader: {
+    backgroundColor: "#f8fafc",
+    borderBottomColor: "#e2e8f0",
+    borderBottomWidth: 1,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  mobileListTitleRow: {
+    alignItems: "center",
     flexDirection: "row",
-    gap: 6,
+    justifyContent: "space-between",
+    marginBottom: 12,
+    minHeight: 36,
   },
-  tabs: {
-    paddingLeft: 18,
-    paddingTop: 18,
+  mobileNotebookTitleButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 1,
+    gap: 4,
+    minHeight: 36,
+    paddingRight: 12,
   },
-  notebookPill: {
+  mobileNotebookTitle: {
+    color: "#0f172a",
+    flexShrink: 1,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  mobileMoreButton: {
+    alignItems: "center",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  mobileSearchRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  mobileSearchButton: {
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 18,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    height: 36,
+    paddingHorizontal: 13,
+  },
+  mobileSearchPlaceholder: {
+    color: "#64748b",
+    fontSize: 14,
+  },
+  mobileFilterButton: {
     alignItems: "center",
     backgroundColor: "#ffffff",
     borderColor: "#e2e8f0",
-    borderRadius: 8,
+    borderRadius: 18,
     borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    marginRight: 8,
-    maxWidth: 190,
-    minHeight: 38,
-    paddingHorizontal: 12,
-  },
-  notebookPillActive: {
-    backgroundColor: "#0f172a",
-    borderColor: "#0f172a",
-  },
-  notebookPillToggle: {
-    alignItems: "center",
-    height: 18,
+    height: 36,
     justifyContent: "center",
-    marginLeft: -4,
-    width: 18,
+    width: 36,
   },
-  notebookPillText: {
-    color: "#334155",
-    flexShrink: 1,
-    fontSize: 14,
-    fontWeight: "700",
+  mobileFilterButtonActive: {
+    backgroundColor: "#334155",
+    borderColor: "#334155",
   },
-  notebookPillTextActive: {
-    color: "#ffffff",
-  },
-  notebookPillCount: {
-    color: "#64748b",
-    fontSize: 12,
-    fontWeight: "700",
+  modalHeaderActions: {
+    flexDirection: "row",
+    gap: 6,
   },
   contentHeader: {
     alignItems: "center",
@@ -6386,8 +6264,9 @@ const styles = StyleSheet.create({
     color: "#0f172a",
   },
   list: {
-    paddingBottom: 22,
-    paddingHorizontal: 18,
+    paddingBottom: 18,
+    paddingHorizontal: 12,
+    paddingTop: 12,
   },
   assetList: {
     padding: 18,
@@ -6406,15 +6285,17 @@ const styles = StyleSheet.create({
   },
   memoCard: {
     backgroundColor: "#ffffff",
-    borderColor: "#e2e8f0",
-    borderRadius: 8,
+    borderColor: "#f1f5f9",
+    borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 10,
-    padding: 14,
+    marginBottom: 12,
+    minHeight: 132,
+    padding: 16,
   },
   memoCardCompact: {
-    marginBottom: 8,
-    padding: 11,
+    marginBottom: 10,
+    minHeight: 84,
+    padding: 13,
   },
   memoCardSelected: {
     backgroundColor: "#f8fafc",
@@ -6423,7 +6304,7 @@ const styles = StyleSheet.create({
   memoCardTop: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   selectionIndicator: {
     alignItems: "center",
@@ -6442,7 +6323,7 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     flex: 1,
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   pinText: {
     color: "#2563eb",
@@ -6450,23 +6331,24 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   memoExcerpt: {
-    color: "#475569",
+    color: "#0f172a",
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
+    minHeight: 40,
   },
   memoMeta: {
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 12,
+    marginTop: 18,
   },
   memoMetaCompact: {
     marginTop: 8,
   },
   memoDate: {
-    color: "#94a3b8",
+    color: "#334155",
     fontSize: 12,
     fontWeight: "600",
   },
@@ -7325,31 +7207,26 @@ const styles = StyleSheet.create({
   bottomNav: {
     alignItems: "center",
     backgroundColor: "#ffffff",
-    borderColor: "#e2e8f0",
+    borderTopColor: "#e2e8f0",
     borderTopWidth: 1,
-    bottom: 0,
     flexDirection: "row",
-    height: 64,
     justifyContent: "space-between",
-    left: 0,
-    paddingHorizontal: 44,
-    position: "absolute",
-    right: 0,
+    paddingHorizontal: 36,
   },
   bottomCreateButton: {
     alignItems: "center",
     backgroundColor: "#10b981",
     borderColor: "#ffffff",
-    borderRadius: 28,
-    borderWidth: 5,
-    height: 56,
+    borderRadius: 26,
+    borderWidth: 4,
+    height: 52,
     justifyContent: "center",
-    marginTop: -28,
+    marginTop: -16,
     shadowColor: "#10b981",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 18,
-    width: 56,
+    width: 52,
   },
   bottomCreateButtonDisabled: {
     backgroundColor: "#cbd5e1",
@@ -7359,7 +7236,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderColor: "#e2e8f0",
     borderTopWidth: 1,
-    bottom: 64,
     left: 0,
     paddingHorizontal: 14,
     paddingTop: 10,
