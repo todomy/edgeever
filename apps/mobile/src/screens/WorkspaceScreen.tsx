@@ -2210,6 +2210,7 @@ const CreateMemoModal = ({
   };
 
   const pickAndUploadImage = async () => {
+    let uploadId: string | null = null;
     try {
       const DocumentPicker = await import("expo-document-picker");
       const result = await DocumentPicker.getDocumentAsync({
@@ -2219,21 +2220,27 @@ const CreateMemoModal = ({
       });
       const asset = result.canceled ? null : result.assets[0];
       if (!asset) {
-        return null;
+        return;
       }
+      uploadId = createMobileImageUploadId();
+      const previewDataUrl = await createLocalImagePreviewDataUrl(asset);
+      editorRef.current?.beginImageUpload(uploadId, previewDataUrl);
       const memo = await materializeMemoForImage();
       setImageOperation("uploading");
       const uploadAsset = await prepareUploadAsset(asset, imageCompressionEnabled);
       const form = new FormData();
       form.append("file", new ExpoFile(uploadAsset.uri));
       const { resource } = await client!.uploadMemoResource(memo.id, form);
-      return {
-        alt: resource.filename || uploadAsset.name || "图片",
-        url: resource.url,
-      };
+      editorRef.current?.completeImageUpload(
+        uploadId,
+        resource.url,
+        resource.filename || uploadAsset.name || "图片"
+      );
     } catch (error) {
+      if (uploadId) {
+        editorRef.current?.cancelImageUpload(uploadId);
+      }
       Alert.alert("图片上传失败", error instanceof Error ? error.message : "请检查网络连接后重试");
-      return null;
     } finally {
       setImageOperation("idle");
     }
@@ -4399,11 +4406,11 @@ const RichEditorModal = ({
 
   const pickAndUploadImage = async () => {
     if (!client || !memo || uploadingRef.current) {
-      return null;
+      return;
     }
     if (memo.id.startsWith("local:")) {
       Alert.alert("正在同步新笔记", "首次同步完成后即可上传本地图片；图片链接现在就可以直接粘贴到正文。");
-      return null;
+      return;
     }
     const DocumentPicker = await import("expo-document-picker");
     const result = await DocumentPicker.getDocumentAsync({
@@ -4413,24 +4420,28 @@ const RichEditorModal = ({
     });
     const asset = result.canceled ? null : result.assets[0];
     if (!asset) {
-      return null;
+      return;
     }
 
+    const uploadId = createMobileImageUploadId();
     uploadingRef.current = true;
     setUploading(true);
     setError(null);
     try {
+      const previewDataUrl = await createLocalImagePreviewDataUrl(asset);
+      editorRef.current?.beginImageUpload(uploadId, previewDataUrl);
       const uploadAsset = await prepareUploadAsset(asset, imageCompressionEnabled);
       const form = new FormData();
       form.append("file", new ExpoFile(uploadAsset.uri));
       const { resource } = await client.uploadMemoResource(memo.id, form);
-      return {
-        alt: resource.filename || uploadAsset.name || "图片",
-        url: resource.url,
-      };
+      editorRef.current?.completeImageUpload(
+        uploadId,
+        resource.url,
+        resource.filename || uploadAsset.name || "图片"
+      );
     } catch (uploadError) {
+      editorRef.current?.cancelImageUpload(uploadId);
       setError(uploadError instanceof Error ? uploadError.message : "图片上传失败");
-      return null;
     } finally {
       uploadingRef.current = false;
       setUploading(false);
@@ -5529,6 +5540,15 @@ const blobToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   };
   reader.readAsDataURL(blob);
 });
+
+const createMobileImageUploadId = () =>
+  `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const createLocalImagePreviewDataUrl = async (asset: { mimeType?: string | null; uri: string }) => {
+  const file = new ExpoFile(asset.uri);
+  const mimeType = asset.mimeType || file.type || "application/octet-stream";
+  return `data:${mimeType};base64,${await file.base64()}`;
+};
 
 const appendResourceMarkdown = (
   currentMarkdown: string,

@@ -79,7 +79,7 @@
     },
     "apps/mobile": {
       "name": "@edgeever/mobile",
-      "version": "0.4.16",
+      "version": "0.4.17",
       "dependencies": {
         "@edgeever/client": "workspace:*",
         "@edgeever/shared": "workspace:*",

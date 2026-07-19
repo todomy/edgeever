@@ -24,14 +24,12 @@ import {
 
 type EditorDoc = TiptapDoc;
 
-type PickedImage = {
-  alt: string;
-  url: string;
-};
-
 type DOMValue = Parameters<DOMImperativeFactory[string]>[0];
 
 export interface LocalTiptapEditorRef extends DOMImperativeFactory {
+  beginImageUpload: (uploadId: DOMValue, previewDataUrl: DOMValue) => void;
+  cancelImageUpload: (uploadId: DOMValue) => void;
+  completeImageUpload: (uploadId: DOMValue, imageUrl: DOMValue, alt: DOMValue) => void;
   flush: () => void;
   focusEnd: () => void;
   replaceAll: (query: DOMValue, replacement: DOMValue) => void;
@@ -45,7 +43,7 @@ type LocalTiptapEditorProps = {
   dom?: DOMProps;
   onChange: (content: EditorDoc) => Promise<void>;
   onLoadResource: (source: string) => Promise<string | null>;
-  onPickImage: () => Promise<PickedImage | null>;
+  onPickImage: () => Promise<void>;
   onReady: (startupMs: number) => Promise<void>;
   onSearchResult?: (count: number, index: number) => Promise<void>;
   ref: Ref<LocalTiptapEditorRef>;
@@ -61,7 +59,7 @@ export default function LocalTiptapEditor(props: LocalTiptapEditorProps) {
   const startedAtRef = useRef(performance.now());
   const changeTimerRef = useRef<number | null>(null);
   const imageUploadInFlightRef = useRef(false);
-  const imageUploadSequenceRef = useRef(0);
+  const pendingImageSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const onChangeRef = useRef(props.onChange);
   const onLoadResourceRef = useRef(props.onLoadResource);
   const onPickImageRef = useRef(props.onPickImage);
@@ -151,15 +149,50 @@ export default function LocalTiptapEditor(props: LocalTiptapEditorProps) {
     window.requestAnimationFrame(() => search(normalizedQuery, 0));
   }, [editor, search]);
 
+  const beginImageUpload = useCallback((uploadIdValue: DOMValue, previewDataUrlValue: DOMValue) => {
+    if (!editor || typeof uploadIdValue !== "string" || typeof previewDataUrlValue !== "string") {
+      return;
+    }
+    insertImageUploadPlaceholder(
+      editor,
+      createMobileImageUploadPlaceholderSource(uploadIdValue),
+      props.locale === "en-US" ? "Uploading image…" : "图片上传中…",
+      previewDataUrlValue,
+      pendingImageSelectionRef.current
+    );
+  }, [editor, props.locale]);
+
+  const cancelImageUpload = useCallback((uploadIdValue: DOMValue) => {
+    if (!editor || typeof uploadIdValue !== "string") {
+      return;
+    }
+    removeImageUploadPlaceholder(editor, createMobileImageUploadPlaceholderSource(uploadIdValue));
+  }, [editor]);
+
+  const completeImageUpload = useCallback((uploadIdValue: DOMValue, imageUrlValue: DOMValue, altValue: DOMValue) => {
+    if (!editor || typeof uploadIdValue !== "string" || typeof imageUrlValue !== "string") {
+      return;
+    }
+    replaceImageUploadPlaceholder(
+      editor,
+      createMobileImageUploadPlaceholderSource(uploadIdValue),
+      resolveUrl(imageUrlValue, props.baseUrl),
+      typeof altValue === "string" ? altValue : ""
+    );
+  }, [editor, props.baseUrl]);
+
   useDOMImperativeHandle(
     props.ref,
     () => ({
+      beginImageUpload,
+      cancelImageUpload,
+      completeImageUpload,
       flush,
       focusEnd: () => editor?.commands.focus("end"),
       replaceAll,
       search,
     }),
-    [editor, flush, replaceAll, search]
+    [beginImageUpload, cancelImageUpload, completeImageUpload, editor, flush, replaceAll, search]
   );
 
   useEffect(() => {
@@ -218,32 +251,15 @@ export default function LocalTiptapEditor(props: LocalTiptapEditorProps) {
     }
 
     imageUploadInFlightRef.current = true;
-    imageUploadSequenceRef.current += 1;
-    const placeholderSource = createMobileImageUploadPlaceholderSource(
-      `${Date.now()}-${imageUploadSequenceRef.current}`
-    );
-    insertImageUploadPlaceholder(
-      editor,
-      placeholderSource,
-      props.locale === "en-US" ? "Uploading image…" : "图片上传中…"
-    );
+    pendingImageSelectionRef.current = {
+      from: editor.state.selection.from,
+      to: editor.state.selection.to,
+    };
 
     try {
-      const image = await onPickImageRef.current();
-      if (image) {
-        replaceImageUploadPlaceholder(
-          editor,
-          placeholderSource,
-          resolveUrl(image.url, props.baseUrl),
-          image.alt
-        );
-      } else {
-        removeImageUploadPlaceholder(editor, placeholderSource);
-      }
-    } catch (error) {
-      removeImageUploadPlaceholder(editor, placeholderSource);
-      throw error;
+      await onPickImageRef.current();
     } finally {
+      pendingImageSelectionRef.current = null;
       imageUploadInFlightRef.current = false;
     }
   };
@@ -434,10 +450,24 @@ const createProtectedImageExtension = (
         placeholder.setAttribute("role", "status");
         placeholder.setAttribute("aria-live", "polite");
 
+        const preview = document.createElement("img");
+        preview.className = "edgeever-image-upload-preview";
+        preview.alt = "";
+        const previewSource = String(node.attrs.title ?? "");
+        if (previewSource) {
+          preview.src = previewSource;
+        }
+
+        const overlay = document.createElement("div");
+        overlay.className = "edgeever-image-upload-overlay";
         const spinner = document.createElement("span");
         spinner.className = "edgeever-image-upload-spinner";
         spinner.setAttribute("aria-hidden", "true");
-        placeholder.append(spinner, locale === "en-US" ? "Uploading image…" : "图片上传中…");
+        overlay.append(spinner, locale === "en-US" ? "Uploading image…" : "图片上传中…");
+        if (previewSource) {
+          placeholder.append(preview);
+        }
+        placeholder.append(overlay);
 
         return {
           dom: placeholder,
@@ -523,13 +553,21 @@ const findImageUploadPlaceholder = (
   return match as ImageUploadPlaceholderMatch | null;
 };
 
-const insertImageUploadPlaceholder = (editor: TiptapEditor, source: string, alt: string) => {
+const insertImageUploadPlaceholder = (
+  editor: TiptapEditor,
+  source: string,
+  alt: string,
+  previewDataUrl: string,
+  selection: { from: number; to: number } | null
+) => {
   const imageType = editor.schema.nodes.image;
   if (!imageType) {
     return;
   }
-  editor.chain().focus().command(({ tr, dispatch }) => {
-    tr.replaceSelectionWith(imageType.create({ alt, src: source }));
+  editor.chain().command(({ tr, dispatch }) => {
+    const from = Math.min(selection?.from ?? tr.selection.from, tr.doc.content.size);
+    const to = Math.min(Math.max(selection?.to ?? tr.selection.to, from), tr.doc.content.size);
+    tr.replaceRangeWith(from, to, imageType.create({ alt, src: source, title: previewDataUrl }));
     tr.setMeta(TRANSIENT_IMAGE_UPLOAD_META, true);
     dispatch?.(tr);
     return true;
@@ -551,7 +589,7 @@ const replaceImageUploadPlaceholder = (
     if (!node) {
       return false;
     }
-    tr.setNodeMarkup(match.pos, node.type, { ...node.attrs, alt, src: imageSource });
+    tr.setNodeMarkup(match.pos, node.type, { ...node.attrs, alt, src: imageSource, title: null });
     dispatch?.(tr);
     return true;
   }).run();
@@ -591,7 +629,9 @@ const getEditorStyles = (theme: "light" | "dark") => `
   .edgeever-editor-content code { border-radius: 4px; padding: 2px 4px; background: ${theme === "dark" ? "#1e293b" : "#f1f5f9"}; }
   .edgeever-editor-content pre code { padding: 0; background: transparent; }
   .edgeever-editor-content img { display: block; max-width: 100%; height: auto; margin: 14px auto; border-radius: 10px; }
-  .edgeever-image-upload-placeholder { display: flex; min-height: 112px; margin: 14px 0; align-items: center; justify-content: center; gap: 10px; border: 1px dashed ${theme === "dark" ? "#475569" : "#cbd5e1"}; border-radius: 10px; background: ${theme === "dark" ? "#1e293b" : "#f8fafc"}; color: ${theme === "dark" ? "#cbd5e1" : "#64748b"}; font-size: 14px; }
+  .edgeever-image-upload-placeholder { position: relative; min-height: 112px; margin: 14px 0; overflow: hidden; border-radius: 10px; background: ${theme === "dark" ? "#1e293b" : "#f1f5f9"}; }
+  .edgeever-image-upload-preview { display: block; width: 100%; max-height: 360px; margin: 0 !important; object-fit: contain; border-radius: 10px; }
+  .edgeever-image-upload-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 10px; background: rgba(15, 23, 42, 0.38); color: #fff; font-size: 14px; font-weight: 600; text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45); }
   .edgeever-image-upload-spinner { width: 18px; height: 18px; border: 2px solid ${theme === "dark" ? "#475569" : "#cbd5e1"}; border-top-color: #0f766e; border-radius: 999px; animation: edgeever-image-upload-spin 0.8s linear infinite; }
   @keyframes edgeever-image-upload-spin { to { transform: rotate(360deg); } }
   .edgeever-editor-content hr { margin: 24px 0; border: 0; border-top: 1px solid #cbd5e1; }
