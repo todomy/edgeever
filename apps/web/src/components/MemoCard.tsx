@@ -4,7 +4,7 @@ import { Star, Check, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import type { MemoSummary } from "@edgeever/shared";
 import { cn } from "@/lib/utils";
 import type { MemoListDensity } from "@/lib/app-helpers";
-import { MEMO_DRAG_MIME, setMemoDragPreview } from "@/lib/app-helpers";
+import { isDefaultMemoTitle, MEMO_DRAG_MIME, setMemoDragPreview } from "@/lib/app-helpers";
 
 const MEMO_LONG_PRESS_DELAY_MS = 520;
 const MEMO_LONG_PRESS_MOVE_TOLERANCE_PX = 14;
@@ -77,7 +77,7 @@ export const MemoCard = ({
   const longPressTimerRef = useRef<number | null>(null);
   const longPressPointRef = useRef<{ x: number; y: number } | null>(null);
   const [modifierHoverActive, setModifierHoverActive] = useState(false);
-  const memoTitle = memo.title?.trim() || t("common.untitledMemo");
+  const memoTitle = memo.title?.trim() && !isDefaultMemoTitle(memo.title) ? memo.title.trim() : t("common.untitledMemo");
   const memoExcerpt = memo.excerpt.trim() || t("memoCard.emptyMemo");
   const showSelectionControl = selectionMode || checked || multiSelectKeyDown || modifierHoverActive;
   const selectionControlLabel = checked

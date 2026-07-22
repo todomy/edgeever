@@ -55,7 +55,6 @@ import type {
   MemoSortMode,
 } from "@/lib/app-helpers";
 import {
-  DEFAULT_MEMO_TITLE,
   MIN_MEMO_LIST_WIDTH_PX,
   MAX_MEMO_LIST_WIDTH_PX,
   DEFAULT_MEMO_LIST_WIDTH_PX,
@@ -1641,7 +1640,7 @@ export const WorkspaceApp = ({
     setMobileBottomNavActive("home");
     createMemoMutation.mutate({
       notebookId: defaultMemoNotebookId,
-      title: template?.title ?? DEFAULT_MEMO_TITLE,
+      title: template?.title ?? "",
       contentMarkdown: template?.contentMarkdown ?? "",
       tags: template?.tags ?? [],
     });

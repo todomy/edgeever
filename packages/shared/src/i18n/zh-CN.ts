@@ -444,6 +444,8 @@ export const zhCN = {
     switchToNotebook: "切换到 {{name}}",
     attachmentInsertText: "附件：{{filename}} {{url}}",
     placeholder: "开始记录...",
+    noteBodyAria: "笔记正文",
+    markdownSourceAria: "Markdown 源码",
     loading: "加载中",
     emptySelection: "选择或新建一条笔记",
     saveState: {
@@ -493,6 +495,10 @@ export const zhCN = {
     replaceAll: "全部替换",
     closeSearch: "关闭搜索",
     editMemo: "编辑笔记",
+    openEditor: "打开编辑器",
+    paste: "粘贴",
+    typeInput: "输入",
+    clipboardReadFailed: "读取剪贴板失败。请确认浏览器允许剪贴板权限。",
     characterCount: "{{count}} 字",
   },
   editorToolbar: {

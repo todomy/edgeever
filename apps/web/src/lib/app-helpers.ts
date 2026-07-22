@@ -216,6 +216,11 @@ const SHORTCUT_ALIASES: Partial<Record<ShortcutAction, ShortcutBinding[]>> = {
 
 const SHORTCUT_ACTION_VALUES: ShortcutAction[] = ["createMemo", "createNotebook", "focusSearch", "focusReplace"];
 
+export const isDefaultMemoTitle = (title: string | null | undefined) => title?.trim() === DEFAULT_MEMO_TITLE;
+
+export const getEditableMemoTitle = (title: string | null | undefined) =>
+  isDefaultMemoTitle(title) ? "" : title?.trim() || "";
+
 export const getMemoTitle = (title: string | null | undefined) => title?.trim() || DEFAULT_MEMO_TITLE;
 
 export const getActiveBlockValue = (editor: any): string => {
