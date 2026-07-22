@@ -210,6 +210,10 @@ export const DEFAULT_SHORTCUT_SETTINGS: ShortcutSettings = {
   focusReplace: { key: "h", ctrlOrMeta: true, shift: false, alt: false },
 };
 
+const SHORTCUT_ALIASES: Partial<Record<ShortcutAction, ShortcutBinding[]>> = {
+  focusReplace: [{ key: "h", ctrlOrMeta: true, shift: true, alt: false }],
+};
+
 const SHORTCUT_ACTION_VALUES: ShortcutAction[] = ["createMemo", "createNotebook", "focusSearch", "focusReplace"];
 
 export const getMemoTitle = (title: string | null | undefined) => title?.trim() || DEFAULT_MEMO_TITLE;
@@ -415,7 +419,10 @@ export const getShortcutActionForEvent = (event: KeyboardEvent, settings: Shortc
     return null;
   }
 
-  return SHORTCUT_ACTION_VALUES.find((action) => shortcutBindingsEqual(settings[action], eventBinding)) ?? null;
+  return SHORTCUT_ACTION_VALUES.find((action) =>
+    shortcutBindingsEqual(settings[action], eventBinding) ||
+    (SHORTCUT_ALIASES[action] ?? []).some((binding) => shortcutBindingsEqual(binding, eventBinding))
+  ) ?? null;
 };
 
 export const compareDateDesc = (first: string, second: string) => {

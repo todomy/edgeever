@@ -1361,11 +1361,12 @@ const RichEditorPane = ({
         class: "prose prose-slate max-w-none focus:outline-none min-h-[300px] px-4 py-3 sm:px-7",
       },
       handleKeyDown: (view, event) => {
+        const shortcutKey = event.key.toLowerCase();
         if (
-          event.key.toLowerCase() !== "f" ||
+          (shortcutKey !== "f" && shortcutKey !== "h") ||
           (!event.ctrlKey && !event.metaKey) ||
           event.altKey ||
-          event.shiftKey
+          (shortcutKey === "f" && event.shiftKey)
         ) {
           return false;
         }
@@ -1383,7 +1384,7 @@ const RichEditorPane = ({
         event.preventDefault();
         setNoteSearchQuery(selectedText);
         setNoteSearchOpen(true);
-        setNoteSearchReplaceOpen(false);
+        setNoteSearchReplaceOpen(shortcutKey === "h");
         window.requestAnimationFrame(() => {
           noteSearchInputRef.current?.focus();
           noteSearchInputRef.current?.select();
@@ -1550,6 +1551,27 @@ const RichEditorPane = ({
       editor.commands.focus();
     }
   }, [editor]);
+
+  useEffect(() => {
+    if (!noteSearchOpen) {
+      return;
+    }
+
+    const handleNoteSearchEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      closeNoteSearch();
+    };
+
+    // Capture the event so Escape works even when focus has moved to the
+    // editor, toolbar, or another control outside the search inputs.
+    window.addEventListener("keydown", handleNoteSearchEscape, true);
+    return () => window.removeEventListener("keydown", handleNoteSearchEscape, true);
+  }, [closeNoteSearch, noteSearchOpen]);
 
   const moveNoteSearchMatch = useCallback(
     (direction: 1 | -1) => {
