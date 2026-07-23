@@ -1,6 +1,6 @@
 # Cloudflare Workers Builds 自动部署
 
-Cloudflare Workers Builds 会在 `main` 发生变化时自动部署 EdgeEver。Cloudflare 一键部署会自动完成连接；CLI 安装只在首次部署或紧急修复时使用本地 `bun run deploy:manual`。
+Cloudflare Workers Builds 会在 `main` 发生变化时自动部署 EdgeEver。Cloudflare 一键部署会自动完成连接；CLI 安装只在首次部署或紧急修复时使用本地 `bun run deploy:manual`。官方 Demo Worker 还会在 GitHub 正式 Release 发布后，由 `Deploy Demo on Release` 工作流立即部署。
 
 ## 配置
 
@@ -41,6 +41,6 @@ EDGE_EVER_BUILDS_API_TOKEN=<token>
 
 ## 更新与排错
 
-配置完成后，任何推送到 `main` 的提交都会让 Cloudflare 安装依赖、检查并构建应用、执行新的 D1 migration、部署 Worker 并验证结果。GitHub 中的 **Update deployed EdgeEver** 工作流每天提供上游更新：默认 `stable` 跟随正式 Release，设置 Repository Variable `EDGE_EVER_UPDATE_CHANNEL=edge` 后跟随上游 `main`。GitHub Actions 不需要保存 Cloudflare 部署 Secret，也不需要本地重新部署。
+配置完成后，任何推送到 `main` 的提交都会让 Cloudflare 安装依赖、检查并构建应用、执行新的 D1 migration、部署 Worker 并验证结果。官方 Demo Worker 在发布正式 Release 时，会通过 GitHub 的 `Deploy Demo on Release` 工作流从 Release 标签立即部署。其他自托管部署仓库可以使用 **Update deployed EdgeEver** 工作流每天检查上游：默认 `stable` 跟随正式 Release，设置 Repository Variable `EDGE_EVER_UPDATE_CHANNEL=edge` 后跟随上游 `main`。GitHub Actions 不需要保存 Cloudflare 部署 Secret，也不需要本地重新部署。
 
 构建失败时，在 Worker 的 **Deployments** 页面查看日志。实例配置变化后，重新执行 `bun run deploy:builds:setup`。

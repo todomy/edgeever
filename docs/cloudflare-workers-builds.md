@@ -1,6 +1,6 @@
 # Cloudflare Workers Builds
 
-Cloudflare Workers Builds deploys EdgeEver whenever `main` changes. Cloudflare one-click deployment connects it automatically; CLI installations use local `bun run deploy:manual` only for first installation or emergency recovery.
+Cloudflare Workers Builds deploys EdgeEver whenever `main` changes. Cloudflare one-click deployment connects it automatically; CLI installations use local `bun run deploy:manual` only for first installation or emergency recovery. The official Demo Worker is additionally deployed by the `Deploy Demo on Release` workflow whenever a formal GitHub Release is published.
 
 ## Setup
 
@@ -41,6 +41,6 @@ If the command reports that no deployment API token is available, open **Worker*
 
 ## Updates and Troubleshooting
 
-After setup, every push to `main` makes Cloudflare install dependencies, check and build the app, apply new D1 migrations, deploy the Worker, and verify the result. The **Update deployed EdgeEver** GitHub workflow supplies upstream updates daily: `stable` follows formal Releases by default, while the repository variable `EDGE_EVER_UPDATE_CHANNEL=edge` follows upstream `main`. No Cloudflare deployment secrets or local redeployment are required in GitHub Actions.
+After setup, every push to `main` makes Cloudflare install dependencies, check and build the app, apply new D1 migrations, deploy the Worker, and verify the result. For the official Demo Worker, publishing a formal Release triggers an immediate deployment from that Release tag through the `Deploy Demo on Release` GitHub workflow. Other self-hosted deployment repositories can use the **Update deployed EdgeEver** workflow, which checks upstream daily: `stable` follows formal Releases by default, while the repository variable `EDGE_EVER_UPDATE_CHANNEL=edge` follows upstream `main`. No Cloudflare deployment secrets or local redeployment are required in GitHub Actions.
 
 If a build fails, inspect its log in the Worker **Deployments** tab. Rerun `bun run deploy:builds:setup` when instance settings change.

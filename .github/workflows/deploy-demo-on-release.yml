@@ -1,0 +1,54 @@
+name: Deploy Demo on Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edgeever-demo-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy Demo Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      EDGE_EVER_WORKER_NAME: ${{ secrets.EDGE_EVER_DEMO_WORKER_NAME }}
+      EDGE_EVER_D1_DATABASE_NAME: ${{ secrets.EDGE_EVER_DEMO_D1_DATABASE_NAME }}
+      EDGE_EVER_D1_DATABASE_ID: ${{ secrets.EDGE_EVER_DEMO_D1_DATABASE_ID }}
+      EDGE_EVER_R2_BUCKET_NAME: ${{ secrets.EDGE_EVER_DEMO_R2_BUCKET_NAME }}
+      EDGE_EVER_R2_PREVIEW_BUCKET_NAME: ${{ secrets.EDGE_EVER_DEMO_R2_PREVIEW_BUCKET_NAME }}
+      EDGE_EVER_AUTH_USERNAME: ${{ secrets.EDGE_EVER_DEMO_AUTH_USERNAME }}
+      EDGE_EVER_SESSION_TTL_DAYS: ${{ secrets.EDGE_EVER_DEMO_SESSION_TTL_DAYS }}
+      EDGE_EVER_DEMO_MODE: "true"
+      EDGE_EVER_DEMO_RESET_CRON: "0 19 * * *"
+      EDGE_EVER_CUSTOM_DOMAIN: ${{ secrets.EDGE_EVER_DEMO_CUSTOM_DOMAIN }}
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Deploy Demo Worker
+        run: bun run deploy
+
+      - name: Verify Demo URL
+        if: env.EDGE_EVER_CUSTOM_DOMAIN != ''
+        run: curl --fail --silent --show-error --location --max-time 20 "https://${EDGE_EVER_CUSTOM_DOMAIN}/"
