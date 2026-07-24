@@ -12,13 +12,13 @@ run_worker_first = ["/api/*", "/mcp", "/__scheduled"]
 [[d1_databases]]
 binding = "DB"
 database_name = "edgeever"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "ba653257-fe6d-4250-9147-8f6a800331a7"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
 binding = "RESOURCES"
 bucket_name = "edgeever-resources"
-preview_bucket_name = "edgeever-resources-preview"
+preview_bucket_name = "edgeever-resources"
 
 [observability]
 enabled = true
